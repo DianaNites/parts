@@ -30,7 +30,7 @@ pub struct ProtectiveMbr {
     boot_code: [u8; 440],
     unique_signature: [u8; 4],
     unknown: [u8; 2],
-    partitions: [u8; 16 * 4],
+    partitions: [MbrPart; 4],
     signature: [u8; 2],
     // Technically exists, but we can ignore it.
     // reserved: [u8; LBA - 512],
@@ -65,8 +65,10 @@ impl ProtectiveMbr {
         mbr.boot_code.copy_from_slice(&source[0..440]);
         mbr.unique_signature.copy_from_slice(&source[440..444]);
         mbr.unknown.copy_from_slice(&source[444..446]);
-        // TODO: Properly read partitions?
-        mbr.partitions.copy_from_slice(&source[446..446 + (16 * 4)]);
+        for (i, part) in mbr.partitions.iter_mut().enumerate() {
+            // `i + 1` because enumerate starts from 0.
+            *part = MbrPart::from_bytes(&source[446..446 + (16 * (i + 1))])?;
+        }
         //
         mbr.signature.copy_from_slice(&source[510..512]);
         //
@@ -94,7 +96,7 @@ impl Default for ProtectiveMbr {
             boot_code: [0u8; 440],
             unique_signature: [0u8; 4],
             unknown: [0u8; 2],
-            partitions: [0u8; 16 * 4],
+            partitions: Default::default(),
             signature: [0u8; 2],
         }
     }
