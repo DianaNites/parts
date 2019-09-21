@@ -13,14 +13,14 @@ pub struct MbrError(InnerError);
 
 #[derive(Debug, Snafu)]
 enum InnerError {
-    #[snafu(display("Invalid Protective/Legacy MBR: {}", source))]
-    InvalidMbr { source: std::io::Error },
+    #[snafu(display("Couldn't Read Protective MBR: {}", source))]
+    Mbr { source: std::io::Error },
 
     #[snafu(display("Invalid MBR Signature"))]
-    InvalidMbrSig {},
+    Signature {},
 
     #[snafu(display("Invalid MBR Partition"))]
-    InvalidMbrPartition {},
+    Partitions {},
 }
 
 type Result<T, E = MbrError> = std::result::Result<T, E>;
@@ -51,7 +51,7 @@ impl ProtectiveMbr {
     /// The position of the `Read`er is undefined on error.
     pub fn from_reader<R: Read>(mut source: R) -> Result<Self> {
         let mut buf = [0u8; SECTOR_BYTE_SIZE];
-        source.read_exact(&mut buf).context(InvalidMbr)?;
+        source.read_exact(&mut buf).context(Mbr)?;
         //
         Self::from_bytes(&buf)
     }
@@ -73,7 +73,7 @@ impl ProtectiveMbr {
         mbr.signature.copy_from_slice(&source[510..512]);
         //
         if mbr.signature[0] != 0x55 || mbr.signature[1] != 0xAA {
-            return InvalidMbrSig.fail().map_err(|e| e.into());
+            return Signature.fail().map_err(|e| e.into());
         }
         Ok(mbr)
     }
@@ -128,13 +128,13 @@ impl MbrPart {
     pub fn from_reader<R: Read>(mut source: R) -> Result<Self> {
         // MBR Partitions are 16 bytes.
         let mut buf = [0u8; 16];
-        source.read_exact(&mut buf).context(InvalidMbr)?;
+        source.read_exact(&mut buf).context(Mbr)?;
         Self::from_bytes(&buf)
     }
 
     pub fn from_bytes(source: &[u8]) -> Result<Self> {
         if source.len() < 16 {
-            return InvalidMbrPartition.fail().map_err(|e| e.into());
+            return Partitions.fail().map_err(|e| e.into());
         }
         //
         let mut part = Self::new();
