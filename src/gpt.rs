@@ -53,7 +53,7 @@ struct GptHeader {
     partition_entries_lba: u64,
 
     // Number of partitions
-    partition_len: u64,
+    partition_len: u32,
 
     // Size of each partition entry structure
     // Must be 128 * 2^n, where n >= 0
