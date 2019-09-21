@@ -79,10 +79,7 @@ impl GptHeader {
     }
 
     pub fn from_reader<R: Read>(source: R) -> Result<Self> {
-        // Ok(bincode::deserialize_from(source).context(Parse)?)
-        let mut x: Self = bincode::deserialize_from(source).context(Parse)?;
-        x.signature = "EFI PART".as_bytes().try_into().unwrap();
-        Ok(x)
+        Ok(bincode::deserialize_from(source).context(Parse)?)
     }
 
     pub fn from_bytes(source: &[u8]) -> Result<Self> {
