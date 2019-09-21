@@ -155,8 +155,8 @@ impl MbrPart {
         part.end_sector = source[6];
         part.end_track = source[7];
         // LBA
-        part.start_lba = u32::from_le_bytes(source[8..=11].try_into().unwrap());
-        part.size_lba = u32::from_le_bytes(source[12..=16].try_into().unwrap());
+        part.start_lba = u32::from_le_bytes(source[8..12].try_into().unwrap());
+        part.size_lba = u32::from_le_bytes(source[12..16].try_into().unwrap());
         //
         Ok(part)
     }
