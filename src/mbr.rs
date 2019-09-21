@@ -66,7 +66,7 @@ impl ProtectiveMbr {
         mbr.unique_signature.copy_from_slice(&source[440..444]);
         mbr.unknown.copy_from_slice(&source[444..446]);
         // TODO: Properly read partitions?
-        mbr.partitions.copy_from_slice(&source[446..446 + (14 * 4)]);
+        mbr.partitions.copy_from_slice(&source[446..446 + (16 * 4)]);
         //
         mbr.signature.copy_from_slice(&source[510..512]);
         //
