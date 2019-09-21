@@ -5,7 +5,9 @@ authors = ["Diana"]
 edition = "2018"
 
 [dependencies]
-uuid = { version ="0.7.4", features = ["v1"] }
+uuid = { version = "0.7.4", features = ["v1"] }
+serde = { version = "1.0.101", features = ["derive"] }
+bincode = "1.1.4"
 
 [dependencies.snafu]
 version = "0.5.0"

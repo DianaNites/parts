@@ -1,6 +1,8 @@
 //! Gpt Definitions
 use crate::mbr::*;
+use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
+use std::convert::TryInto;
 use std::io::prelude::*;
 
 #[derive(Debug, Snafu)]
@@ -9,18 +11,26 @@ pub struct GptError(InnerError);
 #[derive(Debug, Snafu)]
 enum InnerError {
     #[snafu(display("Invalid GPT Header: {}", source))]
-    InvalidGptHeader { source: std::io::Error },
+    GptHeaderError {
+        source: std::io::Error,
+    },
+
+    Parse {
+        source: bincode::Error,
+    },
 
     #[snafu(display("{}", source))]
-    MbrError { source: crate::mbr::MbrError },
+    MbrError {
+        source: crate::mbr::MbrError,
+    },
 }
 
 type Result<T, E = GptError> = std::result::Result<T, E>;
 
-#[derive(Debug, Default)]
+#[derive(Default, Serialize, Deserialize)]
 struct GptHeader {
     // Hard-coded to "EFI PART"
-    signature: String,
+    signature: [u8; 8],
 
     // Currently hard-coded to `1.0`/`0x00010000`, but may change?
     revision: u32,
@@ -50,14 +60,14 @@ struct GptHeader {
     disk_guid: u128,
 
     // Where our partition array starts on disk.
-    partition_entries_lba: u64,
+    partition_array_start: u64,
 
     // Number of partitions
-    partition_len: u32,
+    partitions: u32,
 
     // Size of each partition entry structure
     // Must be 128 * 2^n, where n >= 0
-    partition_entry_size: u32,
+    partition_size: u32,
 
     // CRC32 of the partition array
     partitions_crc32: u32,
@@ -65,7 +75,41 @@ struct GptHeader {
 
 impl GptHeader {
     pub fn new() -> Self {
-        unimplemented!()
+        Self::default()
+    }
+
+    pub fn from_reader<R: Read>(source: R) -> Result<Self> {
+        // Ok(bincode::deserialize_from(source).context(Parse)?)
+        let mut x: Self = bincode::deserialize_from(source).context(Parse)?;
+        x.signature = "EFI PART".as_bytes().try_into().unwrap();
+        Ok(x)
+    }
+
+    pub fn from_bytes(source: &[u8]) -> Result<Self> {
+        Ok(bincode::deserialize(source).context(Parse)?)
+    }
+}
+
+impl std::fmt::Debug for GptHeader {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fmt.debug_struct("GptHeader")
+            .field(
+                "signature",
+                &std::str::from_utf8(&self.signature).unwrap_or("<INVALID GPT>"),
+            )
+            .field("revision", &self.revision)
+            .field("header_size", &self.header_size)
+            .field("header_crc32", &self.header_crc32)
+            .field("this_lba", &self.this_lba)
+            .field("alt_lba", &self.alt_lba)
+            .field("first_usable_lba", &self.first_usable_lba)
+            .field("last_usable_lba", &self.last_usable_lba)
+            .field("disk_guid", &self.disk_guid)
+            .field("partition_array_start", &self.partition_array_start)
+            .field("partitions", &self.partitions)
+            .field("partition_size", &self.partition_size)
+            .field("partitions_crc32", &self.partitions_crc32)
+            .finish()
     }
 }
 
@@ -86,7 +130,7 @@ impl Gpt {
         RS: Read + Seek,
     {
         let mbr = ProtectiveMbr::from_reader(&mut source).context(MbrError)?;
-        let header = GptHeader::new();
+        let header = GptHeader::from_reader(&mut source)?;
         Ok(Self {
             //
             mbr,
