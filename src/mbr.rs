@@ -84,13 +84,8 @@ impl ProtectiveMbr {
 }
 
 impl std::fmt::Debug for ProtectiveMbr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.boot_code[..].fmt(f)?;
-        self.unique_signature[..].fmt(f)?;
-        self.unknown[..].fmt(f)?;
-        self.partitions[..].fmt(f)?;
-        self.signature[..].fmt(f)?;
-        Ok(())
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fmt.debug_struct("ProtectiveMbr").finish()
     }
 }
 
