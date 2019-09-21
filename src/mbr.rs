@@ -25,7 +25,7 @@ enum InnerError {
 
 type Result<T, E = MbrError> = std::result::Result<T, E>;
 
-/// Protective MBR
+/// GPT Protective MBR
 pub struct ProtectiveMbr {
     boot_code: [u8; 440],
     unique_signature: [u8; 4],
@@ -49,6 +49,10 @@ impl ProtectiveMbr {
     /// - If the MBR is superficially invalid. Not extensively validated.
     ///
     /// The position of the `Read`er is undefined on error.
+    ///
+    /// # Notes
+    ///
+    /// This assumes block sizes of 512, so this won't work for some exotic disks.
     pub fn from_reader<R: Read>(mut source: R) -> Result<Self> {
         let mut buf = [0u8; SECTOR_BYTE_SIZE];
         source.read_exact(&mut buf).context(Mbr)?;
