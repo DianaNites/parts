@@ -1,6 +1,9 @@
 //! Utilities
 
-/// Serialize the GPT header Signature, as a fixed size byte array.
+/// (De)Serialize the GPT header Signature, as a fixed size byte array.
+///
+/// Supports serializing from anything that implements `AsRef<[u8]>`,
+/// and deserializing to `String`
 pub mod signature {
     use serde::{
         de::Error as _,
@@ -34,9 +37,12 @@ pub mod signature {
     }
 }
 
-/// Serialize the GPT partition name, as a fixed size byte array.
+/// (De)Serialize the GPT partition name, as a fixed size byte array.
 ///
 /// Handles the conversion to/from UCS-2, currently by assuming it's valid UTF-16.
+///
+/// Supports serializing from anything that implements `AsRef<[u8]>`,
+/// and deserializing to `String`
 pub mod partition_name {
     use serde::{
         de::Error as _,
