@@ -7,4 +7,10 @@ fn main() {
     let mut buff = std::fs::File::open("scratch/test_parts").unwrap();
     let gpt = Gpt::from_reader(buff);
     dbg!(&gpt);
+    match gpt {
+        Err(e) => {
+            dbg!(e);
+        }
+        _ => (),
+    }
 }
