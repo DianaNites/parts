@@ -121,6 +121,7 @@ impl GptHeader {
     }
 }
 
+/// A GPT Partition
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct GptPart {
     /// Defines the type of this partition
@@ -151,10 +152,12 @@ impl GptPart {
     }
 }
 
+/// A GPT Disk
 #[derive(Debug, Default)]
 pub struct Gpt {
     mbr: ProtectiveMbr,
     header: GptHeader,
+    backup: GptHeader,
     partitions: Vec<GptPart>,
 }
 
@@ -171,16 +174,24 @@ impl Gpt {
         source
             .seek(SeekFrom::Start(header.partition_array_start * 512))
             .context(Io)?;
-        // for _ in 0..header.partitions {
-        for _ in 0..2 {
+        for _ in 0..header.partitions {
             partitions.push(GptPart::from_reader(&mut source)?);
         }
+        // TODO: Properly handle primary and backup header.
+        // Read the backup
+        // TODO: Support more block sizes
+        source
+            .seek(SeekFrom::Start(header.alt_lba * 512))
+            .context(Io)?;
+        //
+        let backup = GptHeader::from_reader(&mut source)?;
 
         //
         Ok(Self {
             //
             mbr,
             header,
+            backup,
             partitions,
         })
     }
