@@ -3,12 +3,12 @@ use parts::*;
 use std::io::Cursor;
 
 fn main() {
-    println!("Doing");
     let mut buff = std::fs::File::open("scratch/test_parts").unwrap();
     let gpt = Gpt::from_reader(buff);
     dbg!(&gpt);
     match gpt {
         Err(e) => {
+            println!("{}", e);
             dbg!(e);
         }
         _ => (),
