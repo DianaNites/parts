@@ -1,7 +1,8 @@
 //! Gpt Definitions
 use crate::mbr::*;
+use crc::{crc32, Hasher32};
 use serde::{Deserialize, Serialize};
-use snafu::{ResultExt, Snafu};
+use snafu::{ensure, ResultExt, Snafu};
 use std::convert::TryInto;
 use std::io::prelude::*;
 
@@ -10,10 +11,8 @@ pub struct GptError(InnerError);
 
 #[derive(Debug, Snafu)]
 enum InnerError {
-    #[snafu(display("Invalid GPT Header: {}", source))]
-    GptHeaderError {
-        source: std::io::Error,
-    },
+    #[snafu(display("Invalid GPT Header"))]
+    GptHeaderError {},
 
     Parse {
         source: bincode::Error,
@@ -28,6 +27,7 @@ enum InnerError {
 type Result<T, E = GptError> = std::result::Result<T, E>;
 
 #[derive(Default, Serialize, Deserialize)]
+#[repr(C)]
 struct GptHeader {
     // Hard-coded to "EFI PART"
     signature: [u8; 8],
@@ -70,6 +70,7 @@ struct GptHeader {
     partition_size: u32,
 
     // CRC32 of the partition array
+    // NOTE: Non-aligned? Makes entire structure 96 bytes instead of 92
     partitions_crc32: u32,
 }
 
@@ -79,11 +80,35 @@ impl GptHeader {
     }
 
     pub fn from_reader<R: Read>(source: R) -> Result<Self> {
-        Ok(bincode::deserialize_from(source).context(Parse)?)
+        let mut obj: GptHeader = bincode::deserialize_from(source).context(Parse)?;
+        obj.check_validity()?;
+        Ok(obj)
     }
 
     pub fn from_bytes(source: &[u8]) -> Result<Self> {
-        Ok(bincode::deserialize(source).context(Parse)?)
+        let mut obj: GptHeader = bincode::deserialize(source).context(Parse)?;
+        obj.check_validity()?;
+        Ok(obj)
+    }
+
+    /// Checks the validity of the header
+    ///
+    /// # Details
+    ///
+    /// Checks the Signature and header CRC, but not the partition array
+    fn check_validity(&mut self) -> Result<(), InnerError> {
+        ensure!(&self.signature == b"EFI PART", GptHeaderError);
+        let old_crc = std::mem::replace(&mut self.header_crc32, 0);
+        //
+        let source = self as *const GptHeader as *const [u8; std::mem::size_of::<GptHeader>()];
+        let source = unsafe { *source };
+        // NOTE: Even with repr(C), size_of::<GptHeader>() == 96, not 92.
+        // Even so, this seems to work anyway.
+        let crc = crc32::checksum_ieee(&source[..self.header_size as usize]);
+        ensure!(crc == old_crc, GptHeaderError);
+        self.header_crc32 = old_crc;
+        //
+        Ok(())
     }
 }
 
