@@ -3,7 +3,7 @@ use crate::{mbr::*, util::*};
 use crc::crc32;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt, Snafu};
-use std::io::{prelude::*, Cursor, SeekFrom};
+use std::io::{prelude::*, SeekFrom};
 
 #[derive(Debug, Snafu)]
 pub struct GptError(InnerError);
@@ -77,22 +77,11 @@ pub struct GptHeader {
 }
 
 impl GptHeader {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Read the GPT Header from a `Read`er.
     ///
     /// The `Read`ers current position is undefined after this call.
-    pub fn from_reader<R: Read + Seek>(mut source: R) -> Result<Self> {
+    pub(crate) fn from_reader<R: Read + Seek>(mut source: R) -> Result<Self> {
         let mut obj: GptHeader = bincode::deserialize_from(&mut source).context(Parse)?;
-        obj.check_validity(source)?;
-        Ok(obj)
-    }
-
-    pub fn from_bytes(source: &[u8]) -> Result<Self> {
-        let mut obj: GptHeader = bincode::deserialize(source).context(Parse)?;
-        let source = Cursor::new(source);
         obj.check_validity(source)?;
         Ok(obj)
     }
@@ -157,16 +146,8 @@ pub struct GptPart {
 }
 
 impl GptPart {
-    pub fn new() -> Self {
-        unimplemented!()
-    }
-
-    pub fn from_reader<R: Read + Seek>(mut source: R) -> Result<Self> {
+    pub(crate) fn from_reader<R: Read + Seek>(mut source: R) -> Result<Self> {
         Ok(bincode::deserialize_from(&mut source).context(Parse)?)
-    }
-
-    pub fn from_bytes(source: &[u8]) -> Result<Self> {
-        Ok(bincode::deserialize(source).context(Parse)?)
     }
 }
 
@@ -178,10 +159,6 @@ pub struct Gpt {
 }
 
 impl Gpt {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Read from an existing GPT Disk
     pub fn from_reader<RS>(mut source: RS) -> Result<Self>
     where
@@ -194,7 +171,8 @@ impl Gpt {
         source
             .seek(SeekFrom::Start(header.partition_array_start * 512))
             .context(Io)?;
-        for _ in 0..header.partitions {
+        // for _ in 0..header.partitions {
+        for _ in 0..2 {
             partitions.push(GptPart::from_reader(&mut source)?);
         }
 
@@ -205,10 +183,6 @@ impl Gpt {
             header,
             partitions,
         })
-    }
-
-    pub fn from_bytes(_source: &[u8]) -> Result<Self> {
-        unimplemented!()
     }
 
     pub fn from_file() -> Self {
