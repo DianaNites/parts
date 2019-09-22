@@ -29,47 +29,47 @@ type Result<T, E = GptError> = std::result::Result<T, E>;
 #[derive(Default, Serialize, Deserialize)]
 #[repr(C)]
 struct GptHeader {
-    // Hard-coded to "EFI PART"
+    /// Hard-coded to "EFI PART"
     signature: [u8; 8],
 
-    // Currently hard-coded to `1.0`/`0x00010000`, but may change?
+    /// Currently hard-coded to `1.0`/`0x00010000`, but may change?
     revision: u32,
 
-    // Must be header_size >= 92 and header_size <= logical block size
+    /// Must be header_size >= 92 and header_size <= logical block size
     header_size: u32,
 
-    // CRC32(bytes[0..header_size])
+    /// CRC32(bytes[0..header_size])
     header_crc32: u32,
 
-    // Must be zero
+    /// Must be zero
     _reserved: u32,
 
-    // The logical block address we reside in
+    /// The logical block address we reside in
     this_lba: u64,
 
-    // The logical block address the backup header is in
+    /// The logical block address the backup header is in
     alt_lba: u64,
 
-    // Where partitions can start
+    /// Where partitions can start
     first_usable_lba: u64,
 
-    // Where partitions must end
+    /// Where partitions must end
     last_usable_lba: u64,
 
-    // Disk GUID
+    /// Disk GUID
     disk_guid: u128,
 
-    // Where our partition array starts on disk.
+    /// Where our partition array starts on disk.
     partition_array_start: u64,
 
-    // Number of partitions
+    /// Number of partitions
     partitions: u32,
 
-    // Size of each partition entry structure
+    /// Size of each partition entry structure
     // Must be 128 * 2^n, where n >= 0
     partition_size: u32,
 
-    // CRC32 of the partition array
+    /// CRC32 of the partition array
     // NOTE: Non-aligned? Makes entire structure 96 bytes instead of 92
     partitions_crc32: u32,
 }
