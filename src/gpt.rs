@@ -1,12 +1,9 @@
 //! Gpt Definitions
 use crate::mbr::*;
-use crc::{crc32, Hasher32};
+use crc::crc32;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt, Snafu};
-use std::{
-    convert::TryInto,
-    io::{prelude::*, Cursor, SeekFrom},
-};
+use std::io::{prelude::*, Cursor, SeekFrom};
 
 #[derive(Debug, Snafu)]
 pub struct GptError(InnerError);
@@ -35,7 +32,7 @@ mod signature {
     use serde::{
         de::Error as _,
         ser::{Error as _, SerializeTuple as _},
-        Deserialize, Deserializer, Serialize, Serializer,
+        Deserialize, Deserializer, Serializer,
     };
 
     pub fn serialize<T, S>(data: T, serializer: S) -> Result<S::Ok, S::Error>
@@ -68,9 +65,8 @@ mod partition_name {
     use serde::{
         de::Error as _,
         ser::{Error as _, SerializeTuple as _},
-        Deserialize, Deserializer, Serialize, Serializer,
+        Deserialize, Deserializer, Serializer,
     };
-    use std::convert::TryInto;
 
     pub fn serialize<T, S>(data: T, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -117,7 +113,7 @@ mod partition_name {
 
 /// The GPT Header Structure
 #[derive(Default, Debug, Serialize, Deserialize)]
-struct GptHeader {
+pub struct GptHeader {
     /// Hard-coded to "EFI PART"
     #[serde(with = "signature")]
     signature: String,
@@ -220,7 +216,7 @@ impl GptHeader {
 }
 
 #[derive(Default, Debug, Serialize, Deserialize)]
-struct GptPart {
+pub struct GptPart {
     /// Defines the type of this partition
     partition_type_guid: u128,
 

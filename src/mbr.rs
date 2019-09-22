@@ -1,5 +1,5 @@
 //! MBR definitions
-use snafu::{ensure, IntoError, NoneError, ResultExt, Snafu};
+use snafu::{ResultExt, Snafu};
 use std::{convert::TryInto, io::prelude::*};
 
 // TODO: Should be user-defined

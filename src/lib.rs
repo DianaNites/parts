@@ -1,5 +1,4 @@
 //! parts
-#![allow(unused_imports, dead_code)]
 
 pub mod gpt;
 pub mod mbr;
