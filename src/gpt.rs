@@ -31,13 +31,94 @@ enum InnerError {
 
 type Result<T, E = GptError> = std::result::Result<T, E>;
 
+mod signature {
+    use serde::de::Error as _;
+    use serde::ser::Error as _;
+    use serde::ser::SerializeTuple as _;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<T, S>(data: T, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: AsRef<[u8]>,
+    {
+        let data = data.as_ref();
+        if data.len() != 8 {
+            return Err(S::Error::custom("Invalid GPT Signature"));
+        }
+        //
+        let mut tup = serializer.serialize_tuple(8)?;
+        for byte in data {
+            tup.serialize_element(byte)?;
+        }
+        tup.end()
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<String, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let bytes: [u8; 8] = <[u8; 8]>::deserialize(deserializer)?;
+        String::from_utf8(bytes.to_vec()).map_err(D::Error::custom)
+    }
+}
+
+mod partition_name {
+    use serde::de::Error as _;
+    use serde::ser::Error as _;
+    use serde::ser::SerializeTuple as _;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::convert::TryInto;
+
+    pub fn serialize<T, S>(data: T, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: AsRef<str>,
+    {
+        let data = data.as_ref();
+        if data.len() >= 36 {
+            return Err(S::Error::custom("Invalid Partition Name, too long"));
+        }
+        //
+        let buf: Vec<u16> = data.encode_utf16().collect();
+        assert!(buf.len() < 36);
+        // TODO: Verify UCS-2?
+        let mut tup = serializer.serialize_tuple(36)?;
+        for byte in &buf {
+            tup.serialize_element(byte)?;
+        }
+        // Null-init any remainder
+        for _ in 0..36 - buf.len() {
+            tup.serialize_element(&0u16)?;
+        }
+        tup.end()
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<String, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // Using u32 because of technical limitations, array impls limited to 32.
+        // 72 / 4 == 18
+        let bytes: [u32; 18] = <[u32; 18]>::deserialize(deserializer)?;
+        // Partition names are UCS-2
+        let bytes: *const [u16; 36] = &bytes as *const [u32; 18] as *const [u16; 36];
+        let bytes: [u16; 36] = unsafe { *bytes };
+        //
+        let mut s = String::from_utf16(&bytes).map_err(D::Error::custom)?;
+        // Strip nul bytes
+        s.retain(|c| c != '\0');
+        //
+        Ok(s)
+    }
+}
+
 /// The GPT Header Structure
-#[derive(Default, Serialize, Deserialize)]
-// Required because we do some messing around with the layout.
-#[repr(C)]
+#[derive(Default, Debug, Serialize, Deserialize)]
 struct GptHeader {
     /// Hard-coded to "EFI PART"
-    signature: [u8; 8],
+    #[serde(with = "signature")]
+    signature: String,
 
     /// Currently hard-coded to `1.0`/`0x00010000`, but may change?
     revision: u32,
@@ -77,7 +158,6 @@ struct GptHeader {
     partition_size: u32,
 
     /// CRC32 of the partition array
-    // NOTE: Non-aligned? Makes entire structure 96 bytes instead of 92
     partitions_crc32: u32,
 }
 
@@ -111,16 +191,12 @@ impl GptHeader {
     ///
     /// # Details
     ///
-    /// Checks the Signature and header CRC, but not the partition array
+    /// Checks the Signature, header CRC, and partition array CRC.
     fn check_validity<R: Read + Seek>(&mut self, mut source: R) -> Result<(), InnerError> {
-        ensure!(&self.signature == b"EFI PART", Signature);
+        ensure!(&self.signature == "EFI PART", Signature);
         let old_crc = std::mem::replace(&mut self.header_crc32, 0);
-        //
-        let source_bytes =
-            self as *const GptHeader as *const [u8; std::mem::size_of::<GptHeader>()];
-        let source_bytes = unsafe { *source_bytes };
-        // NOTE: Even with repr(C), size_of::<GptHeader>() == 96, not 92.
-        // Even so, this seems to work anyway.
+        // Relies on serialization being correct.
+        let source_bytes = bincode::serialize(&self).context(Parse)?;
         let crc = crc32::checksum_ieee(&source_bytes[..self.header_size as usize]);
         ensure!(crc == old_crc, ChecksumMismatch);
         self.header_crc32 = old_crc;
@@ -138,29 +214,6 @@ impl GptHeader {
         ensure!(crc == self.partitions_crc32, ChecksumMismatch);
         //
         Ok(())
-    }
-}
-
-impl std::fmt::Debug for GptHeader {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fmt.debug_struct("GptHeader")
-            .field(
-                "signature",
-                &std::str::from_utf8(&self.signature).unwrap_or("<INVALID GPT>"),
-            )
-            .field("revision", &self.revision)
-            .field("header_size", &self.header_size)
-            .field("header_crc32", &self.header_crc32)
-            .field("this_lba", &self.this_lba)
-            .field("alt_lba", &self.alt_lba)
-            .field("first_usable_lba", &self.first_usable_lba)
-            .field("last_usable_lba", &self.last_usable_lba)
-            .field("disk_guid", &self.disk_guid)
-            .field("partition_array_start", &self.partition_array_start)
-            .field("partitions", &self.partitions)
-            .field("partition_size", &self.partition_size)
-            .field("partitions_crc32", &self.partitions_crc32)
-            .finish()
     }
 }
 
@@ -182,12 +235,10 @@ struct GptPart {
     // TODO: Bitflags
     attributes: u64,
 
-    /// Null-terminated name
-    // FIXME: Proper string support.
-    // [u8; 72]
-    name: [u8; 32],
-    name_2: [u8; 32],
-    name_3: [u8; 8],
+    /// Null-terminated name, UCS-2 string,
+    /// max length of 36 including null.
+    #[serde(with = "partition_name")]
+    name: String,
 }
 
 impl GptPart {
@@ -213,7 +264,7 @@ pub struct Gpt {
 
 impl Gpt {
     pub fn new() -> Self {
-        unimplemented!()
+        Self::default()
     }
 
     /// Read from an existing GPT Disk
