@@ -9,14 +9,8 @@ pub struct MbrError(InnerError);
 
 #[derive(Debug, Snafu)]
 enum InnerError {
-    #[snafu(display("Couldn't Read Protective MBR: {}", source))]
-    Mbr { source: std::io::Error },
-
     #[snafu(display("Invalid MBR Signature"))]
     Signature {},
-
-    #[snafu(display("Invalid MBR Partition"))]
-    Partitions {},
 
     #[snafu(display("Error parsing MBR Header structure"))]
     Parse { source: bincode::Error },
@@ -37,10 +31,6 @@ pub struct ProtectiveMbr {
 }
 
 impl ProtectiveMbr {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Create a `ProtectiveMbr` from a `Read`er.
     ///
     /// # Errors
@@ -53,17 +43,8 @@ impl ProtectiveMbr {
     /// # Notes
     ///
     /// This assumes block sizes of 512, so this won't work for some exotic disks.
-    pub fn from_reader<R: Read>(mut source: R) -> Result<Self> {
+    pub(crate) fn from_reader<R: Read>(mut source: R) -> Result<Self> {
         let obj: Self = bincode::deserialize_from(&mut source).context(Parse)?;
-        obj.validate()?;
-        Ok(obj)
-    }
-
-    /// Create a `ProtectiveMbr` from bytes.
-    ///
-    /// See `Self::from_reader` for error details.
-    pub fn from_bytes(source: &[u8]) -> Result<Self> {
-        let obj: Self = bincode::deserialize(source).context(Parse)?;
         obj.validate()?;
         Ok(obj)
     }
@@ -101,10 +82,4 @@ pub struct MbrPart {
     //
     start_lba: u32,
     size_lba: u32,
-}
-
-impl MbrPart {
-    pub fn new() -> Self {
-        Self::default()
-    }
 }
