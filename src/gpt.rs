@@ -1,6 +1,5 @@
 //! Gpt Definitions
-use crate::mbr::*;
-use crate::util::*;
+use crate::{mbr::*, util::*};
 use crc::crc32;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt, Snafu};
