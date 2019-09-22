@@ -5,23 +5,28 @@ use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt, Snafu};
 use std::convert::TryInto;
 use std::io::prelude::*;
+use std::io::Cursor;
+use std::io::SeekFrom;
 
 #[derive(Debug, Snafu)]
 pub struct GptError(InnerError);
 
 #[derive(Debug, Snafu)]
 enum InnerError {
-    #[snafu(display("Invalid GPT Header"))]
-    GptHeaderError {},
+    #[snafu(display("Invalid GPT Header Signature"))]
+    Signature {},
 
-    Parse {
-        source: bincode::Error,
-    },
+    #[snafu(display("GPT Header Checksum Mismatch"))]
+    ChecksumMismatch {},
+
+    #[snafu(display("Error reading from device"))]
+    Io { source: std::io::Error },
+
+    #[snafu(display("Error parsing GPT Header structure"))]
+    Parse { source: bincode::Error },
 
     #[snafu(display("{}", source))]
-    MbrError {
-        source: crate::mbr::MbrError,
-    },
+    MbrError { source: crate::mbr::MbrError },
 }
 
 type Result<T, E = GptError> = std::result::Result<T, E>;
@@ -79,34 +84,56 @@ impl GptHeader {
         Self::default()
     }
 
-    pub fn from_reader<R: Read>(source: R) -> Result<Self> {
-        let mut obj: GptHeader = bincode::deserialize_from(source).context(Parse)?;
-        obj.check_validity()?;
+    /// Read the GPT Header from a `Read`er.
+    ///
+    /// The `Read`ers current position is undefined after this call.
+    pub fn from_reader<R: Read + Seek>(mut source: R) -> Result<Self> {
+        let mut obj: GptHeader = bincode::deserialize_from(&mut source).context(Parse)?;
+        obj.check_validity(source)?;
         Ok(obj)
     }
 
     pub fn from_bytes(source: &[u8]) -> Result<Self> {
         let mut obj: GptHeader = bincode::deserialize(source).context(Parse)?;
-        obj.check_validity()?;
+        let source = Cursor::new(source);
+        obj.check_validity(source)?;
         Ok(obj)
     }
 
     /// Checks the validity of the header
     ///
+    /// # Errors
+    ///
+    /// The position of `source` is undefined on error.
+    /// If it's important, save it.
+    ///
     /// # Details
     ///
     /// Checks the Signature and header CRC, but not the partition array
-    fn check_validity(&mut self) -> Result<(), InnerError> {
-        ensure!(&self.signature == b"EFI PART", GptHeaderError);
+    fn check_validity<R: Read + Seek>(&mut self, mut source: R) -> Result<(), InnerError> {
+        ensure!(&self.signature == b"EFI PART", Signature);
         let old_crc = std::mem::replace(&mut self.header_crc32, 0);
         //
-        let source = self as *const GptHeader as *const [u8; std::mem::size_of::<GptHeader>()];
-        let source = unsafe { *source };
+        let source_bytes =
+            self as *const GptHeader as *const [u8; std::mem::size_of::<GptHeader>()];
+        let source_bytes = unsafe { *source_bytes };
         // NOTE: Even with repr(C), size_of::<GptHeader>() == 96, not 92.
         // Even so, this seems to work anyway.
-        let crc = crc32::checksum_ieee(&source[..self.header_size as usize]);
-        ensure!(crc == old_crc, GptHeaderError);
+        let crc = crc32::checksum_ieee(&source_bytes[..self.header_size as usize]);
+        ensure!(crc == old_crc, ChecksumMismatch);
         self.header_crc32 = old_crc;
+        //
+        // TODO: Verify header::this_lba is correct
+        //
+        // TODO: Support more block sizes
+        source
+            .seek(SeekFrom::Start(self.partition_array_start * 512))
+            .context(Io)?;
+        let mut buf: Vec<u8> = Vec::with_capacity((self.partitions * self.partition_size) as usize);
+        buf.resize(buf.capacity(), 0);
+        source.read_exact(&mut buf).context(Io)?;
+        let crc = crc32::checksum_ieee(&buf);
+        ensure!(crc == self.partitions_crc32, ChecksumMismatch);
         //
         Ok(())
     }
