@@ -92,3 +92,46 @@ pub mod partition_name {
         Ok(s)
     }
 }
+
+/// (De)Serialize the MBR boot code.
+///
+/// Serializes from a [u8; 440], and deserializes to a Vec<u8>.
+pub mod mbr_boot_code {
+    use generic_array::{typenum::U440, GenericArray};
+    use serde::{
+        de::Error as _,
+        ser::{Error as _, SerializeTuple as _},
+        Deserialize, Deserializer, Serializer,
+    };
+    const MBR_BOOT_CODE_SIZE: usize = 440;
+
+    pub fn serialize<T, S>(data: T, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: AsRef<[u8]>,
+    {
+        let data = data.as_ref();
+        if data.len() >= MBR_BOOT_CODE_SIZE {
+            return Err(S::Error::custom("Invalid Boot Code, too long"));
+        }
+        //
+        let mut tup = serializer.serialize_tuple(MBR_BOOT_CODE_SIZE)?;
+        for byte in data {
+            tup.serialize_element(byte)?;
+        }
+        // Null-init any remainder
+        for _ in 0..MBR_BOOT_CODE_SIZE - data.len() {
+            tup.serialize_element(&0u8)?;
+        }
+        tup.end()
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        GenericArray::<u8, U440>::deserialize(deserializer)
+            .map_err(D::Error::custom)
+            .map(|a| a.to_vec())
+    }
+}

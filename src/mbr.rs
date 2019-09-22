@@ -1,9 +1,8 @@
 //! MBR definitions
-use snafu::{ResultExt, Snafu};
-use std::{convert::TryInto, io::prelude::*};
-
-// TODO: Should be user-defined
-const SECTOR_BYTE_SIZE: usize = 512;
+use crate::util::*;
+use serde::{Deserialize, Serialize};
+use snafu::{ensure, ResultExt, Snafu};
+use std::io::prelude::*;
 
 #[derive(Debug, Snafu)]
 pub struct MbrError(InnerError);
@@ -18,19 +17,23 @@ enum InnerError {
 
     #[snafu(display("Invalid MBR Partition"))]
     Partitions {},
+
+    #[snafu(display("Error parsing MBR Header structure"))]
+    Parse { source: bincode::Error },
 }
 
 type Result<T, E = MbrError> = std::result::Result<T, E>;
 
 /// GPT Protective MBR
+#[derive(Default, Serialize, Deserialize)]
 pub struct ProtectiveMbr {
-    boot_code: [u8; 440],
+    #[serde(with = "mbr_boot_code")]
+    boot_code: Vec<u8>,
+
     unique_signature: [u8; 4],
     unknown: [u8; 2],
     partitions: [MbrPart; 4],
     signature: [u8; 2],
-    // Technically exists, but we can ignore it.
-    // reserved: [u8; LBA - 512],
 }
 
 impl ProtectiveMbr {
@@ -43,7 +46,7 @@ impl ProtectiveMbr {
     /// # Errors
     ///
     /// - If the `Read`er errors.
-    /// - If the MBR is superficially invalid. Not extensively validated.
+    /// - If the MBR is invalid.
     ///
     /// The position of the `Read`er is undefined on error.
     ///
@@ -51,54 +54,38 @@ impl ProtectiveMbr {
     ///
     /// This assumes block sizes of 512, so this won't work for some exotic disks.
     pub fn from_reader<R: Read>(mut source: R) -> Result<Self> {
-        let mut buf = [0u8; SECTOR_BYTE_SIZE];
-        source.read_exact(&mut buf).context(Mbr)?;
-        //
-        Self::from_bytes(&buf)
+        let obj: Self = bincode::deserialize_from(&mut source).context(Parse)?;
+        obj.validate()?;
+        Ok(obj)
     }
 
     /// Create a `ProtectiveMbr` from bytes.
     ///
     /// See `Self::from_reader` for error details.
     pub fn from_bytes(source: &[u8]) -> Result<Self> {
-        let mut mbr = Self::new();
-        //
-        mbr.boot_code.copy_from_slice(&source[0..440]);
-        mbr.unique_signature.copy_from_slice(&source[440..444]);
-        mbr.unknown.copy_from_slice(&source[444..446]);
-        for (i, part) in mbr.partitions.iter_mut().enumerate() {
-            // `i + 1` because enumerate starts from 0.
-            *part = MbrPart::from_bytes(&source[446..446 + (16 * (i + 1))])?;
-        }
-        //
-        mbr.signature.copy_from_slice(&source[510..512]);
-        //
-        if mbr.signature[0] != 0x55 || mbr.signature[1] != 0xAA {
-            return Signature.fail().map_err(|e| e.into());
-        }
-        Ok(mbr)
+        let obj: Self = bincode::deserialize(source).context(Parse)?;
+        obj.validate()?;
+        Ok(obj)
+    }
+
+    fn validate(&self) -> Result<(), InnerError> {
+        ensure!(
+            self.signature[0] == 0x55 && self.signature[1] == 0xAA,
+            Signature
+        );
+        Ok(())
     }
 }
 
 impl std::fmt::Debug for ProtectiveMbr {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fmt.debug_struct("ProtectiveMbr").finish()
+        fmt.debug_struct("ProtectiveMbr")
+            .field("partition", &self.partitions[0])
+            .finish()
     }
 }
 
-impl Default for ProtectiveMbr {
-    fn default() -> Self {
-        Self {
-            boot_code: [0u8; 440],
-            unique_signature: [0u8; 4],
-            unknown: [0u8; 2],
-            partitions: Default::default(),
-            signature: [0u8; 2],
-        }
-    }
-}
-
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct MbrPart {
     boot: u8,
     // CHS
@@ -119,37 +106,5 @@ pub struct MbrPart {
 impl MbrPart {
     pub fn new() -> Self {
         Self::default()
-    }
-
-    pub fn from_reader<R: Read>(mut source: R) -> Result<Self> {
-        // MBR Partitions are 16 bytes.
-        let mut buf = [0u8; 16];
-        source.read_exact(&mut buf).context(Mbr)?;
-        Self::from_bytes(&buf)
-    }
-
-    pub fn from_bytes(source: &[u8]) -> Result<Self> {
-        if source.len() < 16 {
-            return Partitions.fail().map_err(|e| e.into());
-        }
-        //
-        let mut part = Self::new();
-        // Boot flag
-        part.boot = source[0];
-        // CHS Start
-        part.start_head = source[1];
-        part.start_sector = source[2];
-        part.start_track = source[3];
-        // OS Type
-        part.os_type = source[4];
-        // CHS End
-        part.end_head = source[5];
-        part.end_sector = source[6];
-        part.end_track = source[7];
-        // LBA
-        part.start_lba = u32::from_le_bytes(source[8..12].try_into().unwrap());
-        part.size_lba = u32::from_le_bytes(source[12..16].try_into().unwrap());
-        //
-        Ok(part)
     }
 }
