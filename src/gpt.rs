@@ -175,7 +175,11 @@ impl Gpt {
             .seek(SeekFrom::Start(header.partition_array_start * 512))
             .context(Io)?;
         for _ in 0..header.partitions {
-            partitions.push(GptPart::from_reader(&mut source)?);
+            let part = GptPart::from_reader(&mut source)?;
+            // Ignore unused partitions, so partitions isn't cluttered.
+            if part.partition_type_guid != 0 {
+                partitions.push(part);
+            }
         }
         // TODO: Properly handle primary and backup header.
         // Read the backup
