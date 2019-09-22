@@ -31,7 +31,9 @@ enum InnerError {
 
 type Result<T, E = GptError> = std::result::Result<T, E>;
 
+/// The GPT Header Structure
 #[derive(Default, Serialize, Deserialize)]
+// Required because we do some messing around with the layout.
 #[repr(C)]
 struct GptHeader {
     /// Hard-coded to "EFI PART"
@@ -162,10 +164,51 @@ impl std::fmt::Debug for GptHeader {
     }
 }
 
+#[derive(Default, Debug, Serialize, Deserialize)]
+struct GptPart {
+    /// Defines the type of this partition
+    partition_type_guid: u128,
+
+    /// Unique identifer for this partition
+    partition_guid: u128,
+
+    /// Where it starts on disk
+    starting_lba: u64,
+
+    /// Where it ends on disk
+    ending_lba: u64,
+
+    /// Attributes
+    // TODO: Bitflags
+    attributes: u64,
+
+    /// Null-terminated name
+    // FIXME: Proper string support.
+    // [u8; 72]
+    name: [u8; 32],
+    name_2: [u8; 32],
+    name_3: [u8; 8],
+}
+
+impl GptPart {
+    pub fn new() -> Self {
+        unimplemented!()
+    }
+
+    pub fn from_reader<R: Read + Seek>(mut source: R) -> Result<Self> {
+        Ok(bincode::deserialize_from(&mut source).context(Parse)?)
+    }
+
+    pub fn from_bytes(source: &[u8]) -> Result<Self> {
+        Ok(bincode::deserialize(source).context(Parse)?)
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Gpt {
     mbr: ProtectiveMbr,
     header: GptHeader,
+    partitions: Vec<GptPart>,
 }
 
 impl Gpt {
@@ -180,10 +223,21 @@ impl Gpt {
     {
         let mbr = ProtectiveMbr::from_reader(&mut source).context(MbrError)?;
         let header = GptHeader::from_reader(&mut source)?;
+        let mut partitions = Vec::with_capacity(header.partitions as usize);
+        // TODO: Support more block sizes
+        source
+            .seek(SeekFrom::Start(header.partition_array_start * 512))
+            .context(Io)?;
+        for _ in 0..header.partitions {
+            partitions.push(GptPart::from_reader(&mut source)?);
+        }
+
+        //
         Ok(Self {
             //
             mbr,
             header,
+            partitions,
         })
     }
 
