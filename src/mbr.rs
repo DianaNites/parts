@@ -1,9 +1,6 @@
 //! MBR definitions
-use snafu::IntoError;
-use snafu::NoneError;
-use snafu::{ensure, ResultExt, Snafu};
-use std::convert::TryInto;
-use std::io::prelude::*;
+use snafu::{ensure, IntoError, NoneError, ResultExt, Snafu};
+use std::{convert::TryInto, io::prelude::*};
 
 // TODO: Should be user-defined
 const SECTOR_BYTE_SIZE: usize = 512;

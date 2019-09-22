@@ -3,10 +3,10 @@ use crate::mbr::*;
 use crc::{crc32, Hasher32};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt, Snafu};
-use std::convert::TryInto;
-use std::io::prelude::*;
-use std::io::Cursor;
-use std::io::SeekFrom;
+use std::{
+    convert::TryInto,
+    io::{prelude::*, Cursor, SeekFrom},
+};
 
 #[derive(Debug, Snafu)]
 pub struct GptError(InnerError);
@@ -32,10 +32,11 @@ enum InnerError {
 type Result<T, E = GptError> = std::result::Result<T, E>;
 
 mod signature {
-    use serde::de::Error as _;
-    use serde::ser::Error as _;
-    use serde::ser::SerializeTuple as _;
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use serde::{
+        de::Error as _,
+        ser::{Error as _, SerializeTuple as _},
+        Deserialize, Deserializer, Serialize, Serializer,
+    };
 
     pub fn serialize<T, S>(data: T, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -64,10 +65,11 @@ mod signature {
 }
 
 mod partition_name {
-    use serde::de::Error as _;
-    use serde::ser::Error as _;
-    use serde::ser::SerializeTuple as _;
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use serde::{
+        de::Error as _,
+        ser::{Error as _, SerializeTuple as _},
+        Deserialize, Deserializer, Serialize, Serializer,
+    };
     use std::convert::TryInto;
 
     pub fn serialize<T, S>(data: T, serializer: S) -> Result<S::Ok, S::Error>
