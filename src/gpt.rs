@@ -284,16 +284,20 @@ pub struct Gpt {
 
     /// The devices block size. ex, 512, 4096
     block_size: u64,
+
+    /// Size of entire disk
+    disk_size: u64,
 }
 
 impl Gpt {
-    pub fn new(block_size: u64) -> Self {
+    pub fn new(block_size: u64, disk_size: u64) -> Self {
         Self {
             mbr: ProtectiveMbr::new(),
             header: GptHeader::new(),
             backup: GptHeader::new(),
             partitions: Vec::new(),
             block_size,
+            disk_size,
         }
     }
 
@@ -327,6 +331,7 @@ impl Gpt {
             .context(Io)?;
         //
         let backup = GptHeader::from_reader(&mut source, block_size)?;
+        let disk_size = source.seek(SeekFrom::End(0)).context(Io)?;
 
         //
         Ok(Self {
@@ -336,6 +341,7 @@ impl Gpt {
             backup,
             partitions,
             block_size,
+            disk_size,
         })
     }
 
