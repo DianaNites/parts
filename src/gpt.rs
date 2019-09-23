@@ -135,9 +135,7 @@ impl GptHeader {
         bincode::serialize_into(&mut dest, self).context(Parse)?;
         // Account for reserved space.
         let len = (block_size - 92) as usize;
-        let mut empty = Vec::with_capacity(len);
-        empty.resize(len, 0u8);
-        dest.write_all(&empty).context(Io)?;
+        dest.write_all(&vec![0; len]).context(Io)?;
         Ok(())
     }
 }
@@ -177,7 +175,7 @@ impl GptPart {
         let obj = bincode::deserialize_from(&mut source).context(Parse)?;
         // Seek past the remaining block.
         source
-            .seek(SeekFrom::Current(size_of as i64 - 128))
+            .seek(SeekFrom::Current(i64::from(size_of) - 128))
             .context(Io)?;
         Ok(obj)
     }
@@ -186,9 +184,7 @@ impl GptPart {
         bincode::serialize_into(&mut dest, self).context(Parse)?;
         // Account for reserved space.
         let len = (size_of - 128) as usize;
-        let mut empty = Vec::with_capacity(len);
-        empty.resize(len, 0u8);
-        dest.write_all(&empty).context(Io)?;
+        dest.write_all(&vec![0; len]).context(Io)?;
         Ok(())
     }
 }

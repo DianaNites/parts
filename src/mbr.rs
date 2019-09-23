@@ -57,9 +57,7 @@ impl ProtectiveMbr {
         bincode::serialize_into(&mut dest, self).context(Parse)?;
         // Account for reserved space.
         let len = (block_size - 512) as usize;
-        let mut empty = Vec::with_capacity(len);
-        empty.resize(len, 0u8);
-        dest.write_all(&empty).context(Io)?;
+        dest.write_all(&vec![0; len]).context(Io)?;
         Ok(())
     }
 
