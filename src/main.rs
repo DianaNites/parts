@@ -4,7 +4,7 @@ use std::io::Cursor;
 
 fn main() {
     let mut buff = std::fs::File::open("scratch/test_parts").unwrap();
-    let gpt = Gpt::from_reader(buff);
+    let gpt = Gpt::from_reader(buff, 512);
     dbg!(&gpt);
     match gpt {
         Err(e) => {

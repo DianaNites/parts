@@ -24,6 +24,9 @@ enum InnerError {
 
     #[snafu(display("{}", source))]
     MbrError { source: crate::mbr::MbrError },
+
+    #[snafu(display("Invalid Block Size: Must be power of 2"))]
+    BlockSize {},
 }
 
 type Result<T, E = GptError> = std::result::Result<T, E>;
@@ -80,9 +83,11 @@ impl GptHeader {
     /// Read the GPT Header from a `Read`er.
     ///
     /// The `Read`ers current position is undefined after this call.
-    pub(crate) fn from_reader<R: Read + Seek>(mut source: R) -> Result<Self> {
+    ///
+    /// `block_size` is the device's logical block size.
+    pub(crate) fn from_reader<R: Read + Seek>(mut source: R, block_size: u64) -> Result<Self> {
         let mut obj: GptHeader = bincode::deserialize_from(&mut source).context(Parse)?;
-        obj.check_validity(source)?;
+        obj.check_validity(source, block_size)?;
         Ok(obj)
     }
 
@@ -96,7 +101,11 @@ impl GptHeader {
     /// # Details
     ///
     /// Checks the Signature, header CRC, and partition array CRC.
-    fn check_validity<R: Read + Seek>(&mut self, mut source: R) -> Result<(), InnerError> {
+    fn check_validity<R: Read + Seek>(
+        &mut self,
+        mut source: R,
+        block_size: u64,
+    ) -> Result<(), InnerError> {
         ensure!(&self.signature == "EFI PART", Signature);
         let old_crc = std::mem::replace(&mut self.header_crc32, 0);
         // Relies on serialization being correct.
@@ -109,7 +118,7 @@ impl GptHeader {
         //
         // TODO: Support more block sizes
         source
-            .seek(SeekFrom::Start(self.partition_array_start * 512))
+            .seek(SeekFrom::Start(self.partition_array_start * block_size))
             .context(Io)?;
         let mut buf: Vec<u8> = Vec::with_capacity((self.partitions * self.partition_size) as usize);
         buf.resize(buf.capacity(), 0);
@@ -147,8 +156,18 @@ pub struct GptPart {
 }
 
 impl GptPart {
-    pub(crate) fn from_reader<R: Read + Seek>(mut source: R) -> Result<Self> {
-        Ok(bincode::deserialize_from(&mut source).context(Parse)?)
+    /// Reads a GPT Partition from a `Read`er.
+    ///
+    /// This will advance the reader by the size of a single partition entry.
+    ///
+    /// `size_of` is `GptHeader::partition_size`
+    pub(crate) fn from_reader<R: Read + Seek>(mut source: R, size_of: u32) -> Result<Self> {
+        let obj = bincode::deserialize_from(&mut source).context(Parse)?;
+        // Seek past the remaining block.
+        source
+            .seek(SeekFrom::Current(size_of as i64 - 128))
+            .context(Io)?;
+        Ok(obj)
     }
 }
 
@@ -163,19 +182,23 @@ pub struct Gpt {
 
 impl Gpt {
     /// Read from an existing GPT Disk
-    pub fn from_reader<RS>(mut source: RS) -> Result<Self>
+    ///
+    /// `block_size` is the devices logical block size. ex: 512, 4096
+    pub fn from_reader<RS>(mut source: RS, block_size: u64) -> Result<Self>
     where
         RS: Read + Seek,
     {
-        let mbr = ProtectiveMbr::from_reader(&mut source).context(MbrError)?;
-        let header = GptHeader::from_reader(&mut source)?;
+        if !block_size.is_power_of_two() {
+            return BlockSize.fail().map_err(|e| e.into());
+        }
+        let mbr = ProtectiveMbr::from_reader(&mut source, block_size).context(MbrError)?;
+        let header = GptHeader::from_reader(&mut source, block_size)?;
         let mut partitions = Vec::with_capacity(header.partitions as usize);
-        // TODO: Support more block sizes
         source
-            .seek(SeekFrom::Start(header.partition_array_start * 512))
+            .seek(SeekFrom::Start(header.partition_array_start * block_size))
             .context(Io)?;
         for _ in 0..header.partitions {
-            let part = GptPart::from_reader(&mut source)?;
+            let part = GptPart::from_reader(&mut source, header.partition_size)?;
             // Ignore unused partitions, so partitions isn't cluttered.
             if part.partition_type_guid != 0 {
                 partitions.push(part);
@@ -183,12 +206,11 @@ impl Gpt {
         }
         // TODO: Properly handle primary and backup header.
         // Read the backup
-        // TODO: Support more block sizes
         source
-            .seek(SeekFrom::Start(header.alt_lba * 512))
+            .seek(SeekFrom::Start(header.alt_lba * block_size))
             .context(Io)?;
         //
-        let backup = GptHeader::from_reader(&mut source)?;
+        let backup = GptHeader::from_reader(&mut source, block_size)?;
 
         //
         Ok(Self {

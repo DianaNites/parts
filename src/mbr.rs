@@ -2,7 +2,7 @@
 use crate::util::*;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt, Snafu};
-use std::io::prelude::*;
+use std::io::{prelude::*, SeekFrom};
 
 #[derive(Debug, Snafu)]
 pub struct MbrError(InnerError);
@@ -14,6 +14,9 @@ enum InnerError {
 
     #[snafu(display("Error parsing MBR Header structure"))]
     Parse { source: bincode::Error },
+
+    #[snafu(display("Error reading from device"))]
+    Io { source: std::io::Error },
 }
 
 type Result<T, E = MbrError> = std::result::Result<T, E>;
@@ -39,13 +42,13 @@ impl ProtectiveMbr {
     /// - If the MBR is invalid.
     ///
     /// The position of the `Read`er is undefined on error.
-    ///
-    /// # Notes
-    ///
-    /// This assumes block sizes of 512, so this won't work for some exotic disks.
-    pub(crate) fn from_reader<R: Read>(mut source: R) -> Result<Self> {
+    pub(crate) fn from_reader<R: Read + Seek>(mut source: R, block_size: u64) -> Result<Self> {
         let obj: Self = bincode::deserialize_from(&mut source).context(Parse)?;
         obj.validate()?;
+        // Seek past the remaining block.
+        source
+            .seek(SeekFrom::Current(block_size as i64 - 512))
+            .context(Io)?;
         Ok(obj)
     }
 
