@@ -34,6 +34,71 @@ pub struct ProtectiveMbr {
 }
 
 impl ProtectiveMbr {
+    /// Creates a new Protective MBR, valid EXCEPT for
+    /// `size_lba`, which MUST be set properly before writing this out.
+    pub(crate) fn new() -> Self {
+        Self {
+            boot_code: vec![0; 440],
+            unique_signature: [0u8; 4],
+            unknown: [0u8; 2],
+            partitions: [
+                MbrPart {
+                    boot: 0,
+                    //
+                    start_head: 0x00,
+                    start_sector: 0x02,
+                    start_track: 0x00,
+                    //
+                    os_type: 0xEE,
+                    // TODO: Actually calculate these or does it matter?
+                    end_head: 0xFF,
+                    end_sector: 0xFF,
+                    end_track: 0xFF,
+                    //
+                    start_lba: 0x01,
+                    size_lba: u32::max_value(),
+                },
+                MbrPart {
+                    boot: 0,
+                    start_head: 0,
+                    start_sector: 0,
+                    start_track: 0,
+                    os_type: 0,
+                    end_head: 0,
+                    end_sector: 0,
+                    end_track: 0,
+                    start_lba: 0,
+                    size_lba: 0,
+                },
+                MbrPart {
+                    boot: 0,
+                    start_head: 0,
+                    start_sector: 0,
+                    start_track: 0,
+                    os_type: 0,
+                    end_head: 0,
+                    end_sector: 0,
+                    end_track: 0,
+                    start_lba: 0,
+                    size_lba: 0,
+                },
+                MbrPart {
+                    boot: 0,
+                    start_head: 0,
+                    start_sector: 0,
+                    start_track: 0,
+                    os_type: 0,
+                    end_head: 0,
+                    end_sector: 0,
+                    end_track: 0,
+                    start_lba: 0,
+                    size_lba: 0,
+                },
+            ],
+            signature: [0u8; 2],
+        }
+    }
+
     /// Create a `ProtectiveMbr` from a `Read`er.
     ///
     /// # Errors

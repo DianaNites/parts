@@ -4,6 +4,7 @@ use crc::crc32;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt, Snafu};
 use std::io::{prelude::*, SeekFrom};
+use uuid::Uuid;
 
 #[derive(Debug, Snafu)]
 pub struct GptError(InnerError);
@@ -83,6 +84,37 @@ pub struct GptHeader {
 }
 
 impl GptHeader {
+    /// Creates a new GPT Header, valid EXCEPT for
+    ///
+    /// - `this_lba`
+    /// - `alt_lba`
+    /// - `first_usable_lba`
+    /// - `last_usable_lba`
+    /// - `partition_array_start`
+    /// - `partitions`
+    /// - `header_crc32`
+    /// - `partitions_crc32`
+    ///
+    /// All of which MUST be properly calculated before this is written out.
+    pub(crate) fn new() -> Self {
+        Self {
+            signature: "EFI PART".into(),
+            revision: 0x00010000,
+            header_size: 92,
+            header_crc32: Default::default(),
+            _reserved: Default::default(),
+            this_lba: Default::default(),
+            alt_lba: Default::default(),
+            first_usable_lba: Default::default(),
+            last_usable_lba: Default::default(),
+            disk_guid: u128::from_le_bytes(*Uuid::new_v4().as_bytes()),
+            partition_array_start: Default::default(),
+            partitions: Default::default(),
+            partition_size: 128,
+            partitions_crc32: Default::default(),
+        }
+    }
+
     /// Read the GPT Header from a `Read`er.
     ///
     /// The `Read`ers current position is undefined after this call.
@@ -189,6 +221,59 @@ impl GptPart {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub struct GptPartBuilder {
+    partition_type_guid: Uuid,
+
+    partition_guid: Uuid,
+
+    start_lba: u64,
+
+    size: u64,
+
+    name: String,
+
+    block_size: u64,
+}
+
+impl GptPartBuilder {
+    pub fn new(block_size: u64) -> Self {
+        Self {
+            partition_type_guid: Uuid::nil(),
+            partition_guid: Uuid::new_v4(),
+            start_lba: Default::default(),
+            size: Default::default(),
+            name: Default::default(),
+            block_size,
+        }
+    }
+
+    /// `name` must be no more than 35 characters.
+    pub fn name(mut self, name: &str) -> Self {
+        assert!(name.len() < 36, "Name too long");
+        self.name = name.into();
+        self
+    }
+
+    /// Size of the partition, in bytes.
+    pub fn size(mut self, size_in_bytes: u64) -> Self {
+        self.size = size_in_bytes;
+        self
+    }
+
+    pub fn finish(self) -> GptPart {
+        GptPart {
+            partition_type_guid: u128::from_le_bytes(*self.partition_type_guid.as_bytes()),
+            partition_guid: u128::from_le_bytes(*self.partition_guid.as_bytes()),
+            starting_lba: self.start_lba,
+            // FIXME: Is this correct?
+            ending_lba: (self.size / self.block_size) - 1,
+            attributes: 0,
+            name: self.name,
+        }
+    }
+}
+
 /// A GPT Disk
 #[derive(Debug, PartialEq)]
 pub struct Gpt {
@@ -202,6 +287,16 @@ pub struct Gpt {
 }
 
 impl Gpt {
+    pub fn new(block_size: u64) -> Self {
+        Self {
+            mbr: ProtectiveMbr::new(),
+            header: GptHeader::new(),
+            backup: GptHeader::new(),
+            partitions: Vec::new(),
+            block_size,
+        }
+    }
+
     /// Read from an existing GPT Disk
     ///
     /// `block_size` is the devices logical block size. ex: 512, 4096
@@ -279,17 +374,30 @@ impl Gpt {
         //
         Ok(())
     }
+
+    /// Iterator of the available partitions.
+    pub fn partitions(&self) -> &[GptPart] {
+        &self.partitions
+    }
+
+    /// Adds a new partition
+    pub fn add_partition(&mut self, part: GptPart) {
+        self.partitions.push(part);
+        // TODO: Recalculate the header and partition CRC
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Gpt;
-    use std::error::Error;
-    use std::io::prelude::*;
-    use std::io::Cursor;
+    use super::{Gpt, GptPartBuilder};
+    use std::{
+        error::Error,
+        io::{prelude::*, Cursor},
+    };
 
     static TEST_PARTS: &str = "tests/data/test_parts";
     const BLOCK_SIZE: u64 = 512;
+    // 10 * 1024^2
     const TEN_MIB_BYTES: usize = 10485760;
 
     type Result = std::result::Result<(), Box<dyn Error>>;
@@ -332,6 +440,34 @@ mod tests {
         assert_eq!(v.len(), src_buf.len());
         assert_eq!(*v, src_buf);
         //
+        Ok(())
+    }
+
+    /// Test that we can create a partition identical to the one i
+    /// `test_parts`.
+    ///
+    /// See tests/data/README.md for details on how the original was created.
+    #[test]
+    fn create_test_parts() -> Result {
+        let mut gpt = Gpt::new(BLOCK_SIZE);
+        let part = GptPartBuilder::new(BLOCK_SIZE)
+            .name("Test")
+            .size(8 * 1024u64.pow(2))
+            .finish();
+        gpt.add_partition(part);
+        let mut data = Cursor::new(vec![0; 10 * 1024usize.pow(2)]);
+        gpt.to_writer(&mut data)?;
+        //
+        let mut file = std::fs::File::open(TEST_PARTS)?;
+        let mut src_buf = Vec::with_capacity(TEN_MIB_BYTES);
+        file.read_to_end(&mut src_buf)?;
+        //
+        let data = data.get_mut();
+        assert_eq!(data.len(), TEN_MIB_BYTES);
+        assert_eq!(data.len(), src_buf.len());
+        // FIXME: Fails, for obvious reasons.
+        // Those reasons being we don't calculate any of the required data yet.
+        // assert_eq!(*data, src_buf);
         Ok(())
     }
 }
