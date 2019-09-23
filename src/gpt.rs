@@ -116,7 +116,6 @@ impl GptHeader {
         //
         // TODO: Verify header::this_lba is correct
         //
-        // TODO: Support more block sizes
         source
             .seek(SeekFrom::Start(self.partition_array_start * block_size))
             .context(Io)?;
