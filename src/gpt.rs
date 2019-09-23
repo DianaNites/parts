@@ -296,14 +296,12 @@ mod tests {
     /// serialize it, and deserialize it again, with it staying the same.
     #[test]
     fn gpt_roundtrip() -> Result {
-        let mut file = std::fs::File::open(TEST_PARTS)?;
-        let mut src_buf = Vec::with_capacity(TEN_MIB_BYTES);
-        file.read_to_end(&mut src_buf)?;
+        let file = std::fs::File::open(TEST_PARTS)?;
         //
-        let src_gpt = Gpt::from_reader(Cursor::new(&mut src_buf), BLOCK_SIZE)?;
+        let src_gpt = Gpt::from_reader(file, BLOCK_SIZE)?;
         //
         let mut buf = Cursor::new(Vec::with_capacity(TEN_MIB_BYTES));
-        src_gpt.to_writer(&mut buf).unwrap();
+        src_gpt.to_writer(&mut buf)?;
         buf.set_position(0);
         //
         let new_gpt = Gpt::from_reader(&mut buf, BLOCK_SIZE)?;
