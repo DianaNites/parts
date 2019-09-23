@@ -22,7 +22,7 @@ enum InnerError {
 type Result<T, E = MbrError> = std::result::Result<T, E>;
 
 /// GPT Protective MBR
-#[derive(Default, Serialize, Deserialize, PartialEq)]
+#[derive(Serialize, Deserialize, PartialEq)]
 pub struct ProtectiveMbr {
     #[serde(with = "mbr_boot_code")]
     boot_code: Vec<u8>,
@@ -80,7 +80,7 @@ impl std::fmt::Debug for ProtectiveMbr {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct MbrPart {
     boot: u8,
     // CHS
