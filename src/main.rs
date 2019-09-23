@@ -1,6 +1,5 @@
 use parts::*;
-use std::io::Cursor;
-use std::path::Path;
+use std::{io::Cursor, path::Path};
 
 fn main() {
     let read_path = Path::new("scratch/test_parts");
