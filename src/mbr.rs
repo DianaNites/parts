@@ -52,6 +52,46 @@ impl ProtectiveMbr {
         Ok(obj)
     }
 
+    /// Write a GPT Protective MBR to a `Write`er.
+    pub(crate) fn to_writer<W: Write + Seek>(mut dest: W, block_size: u64) -> Result<()> {
+        let len = {
+            let cur = dest.seek(SeekFrom::Current(0)).context(Io)?;
+            let end = dest.seek(SeekFrom::End(0)).context(Io)?;
+            dest.seek(SeekFrom::Start(cur)).context(Io)?;
+            // Convert bytes to LBA
+            (end / block_size) - 1
+        };
+        let mbr = Self {
+            partitions: [
+                MbrPart {
+                    start_sector: 0x02,
+                    //
+                    os_type: 0xEE,
+                    //
+                    end_head: 0xFF,
+                    end_sector: 0xFF,
+                    end_track: 0xFF,
+                    //
+                    start_lba: 1,
+                    size_lba: {
+                        if len > u32::max_value() as u64 {
+                            u32::max_value()
+                        } else {
+                            len as u32
+                        }
+                    },
+                    ..Default::default()
+                },
+                Default::default(),
+                Default::default(),
+                Default::default(),
+            ],
+            signature: [0x55, 0xAA],
+            ..Default::default()
+        };
+        Ok(bincode::serialize_into(dest, &mbr).context(Parse)?)
+    }
+
     fn validate(&self) -> Result<(), InnerError> {
         ensure!(
             self.signature[0] == 0x55 && self.signature[1] == 0xAA,
