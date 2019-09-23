@@ -35,7 +35,7 @@ enum InnerError {
 type Result<T, E = GptError> = std::result::Result<T, E>;
 
 /// The GPT Header Structure
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Serialize, Deserialize, PartialEq)]
 pub struct GptHeader {
     /// Hard-coded to "EFI PART"
     #[serde(with = "signature")]
@@ -133,7 +133,7 @@ impl GptHeader {
 }
 
 /// A GPT Partition
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Serialize, Deserialize, PartialEq)]
 pub struct GptPart {
     /// Defines the type of this partition
     partition_type_guid: u128,
@@ -174,7 +174,7 @@ impl GptPart {
 }
 
 /// A GPT Disk
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct Gpt {
     mbr: ProtectiveMbr,
     header: GptHeader,
