@@ -130,6 +130,10 @@ impl GptHeader {
         //
         Ok(())
     }
+
+    pub(crate) fn to_writer<W: Write>(&self, dest: W) -> Result<()> {
+        Ok(bincode::serialize_into(dest, self).context(Parse)?)
+    }
 }
 
 /// A GPT Partition
@@ -171,6 +175,10 @@ impl GptPart {
             .context(Io)?;
         Ok(obj)
     }
+
+    pub(crate) fn to_writer<W: Write>(&self, dest: W) -> Result<()> {
+        Ok(bincode::serialize_into(dest, self).context(Parse)?)
+    }
 }
 
 /// A GPT Disk
@@ -180,6 +188,9 @@ pub struct Gpt {
     header: GptHeader,
     backup: GptHeader,
     partitions: Vec<GptPart>,
+
+    /// The devices block size. ex, 512, 4096
+    block_size: u64,
 }
 
 impl Gpt {
@@ -221,10 +232,41 @@ impl Gpt {
             header,
             backup,
             partitions,
+            block_size,
         })
     }
 
     pub fn from_file() -> Self {
         unimplemented!()
+    }
+
+    /// Write the GPT structure to a `Write`er.
+    pub fn to_writer<W: Write + Seek>(&self, mut dest: W) -> Result<()> {
+        self.mbr.to_writer(&mut dest).context(MbrError)?;
+
+        self.header.to_writer(&mut dest)?;
+
+        dest.seek(SeekFrom::Start(
+            self.header.partition_array_start * self.block_size,
+        ))
+        .context(Io)?;
+        for part in &self.partitions {
+            part.to_writer(&mut dest)?;
+        }
+
+        dest.seek(SeekFrom::Start(self.header.alt_lba * self.block_size))
+            .context(Io)?;
+        self.backup.to_writer(&mut dest)?;
+
+        dest.seek(SeekFrom::Start(
+            self.backup.partition_array_start * self.block_size,
+        ))
+        .context(Io)?;
+        for part in &self.partitions {
+            part.to_writer(&mut dest)?;
+        }
+
+        //
+        Ok(())
     }
 }
