@@ -182,8 +182,14 @@ impl GptPart {
         Ok(obj)
     }
 
-    pub(crate) fn to_writer<W: Write>(&self, dest: W) -> Result<()> {
-        Ok(bincode::serialize_into(dest, self).context(Parse)?)
+    pub(crate) fn to_writer<W: Write>(&self, mut dest: W, size_of: u32) -> Result<()> {
+        bincode::serialize_into(&mut dest, self).context(Parse)?;
+        // Account for reserved space.
+        let len = (size_of - 128) as usize;
+        let mut empty = Vec::with_capacity(len);
+        empty.resize(len, 0u8);
+        dest.write_all(&empty).context(Io)?;
+        Ok(())
     }
 }
 
@@ -248,7 +254,9 @@ impl Gpt {
 
     /// Write the GPT structure to a `Write`er.
     pub fn to_writer<W: Write + Seek>(&self, mut dest: W) -> Result<()> {
-        self.mbr.to_writer(&mut dest).context(MbrError)?;
+        self.mbr
+            .to_writer(&mut dest, self.block_size)
+            .context(MbrError)?;
 
         self.header.to_writer(&mut dest, self.block_size)?;
 
@@ -257,7 +265,7 @@ impl Gpt {
         ))
         .context(Io)?;
         for part in &self.partitions {
-            part.to_writer(&mut dest)?;
+            part.to_writer(&mut dest, self.header.partition_size)?;
         }
 
         dest.seek(SeekFrom::Start(self.header.alt_lba * self.block_size))
@@ -269,7 +277,7 @@ impl Gpt {
         ))
         .context(Io)?;
         for part in &self.partitions {
-            part.to_writer(&mut dest)?;
+            part.to_writer(&mut dest, self.backup.partition_size)?;
         }
 
         //
@@ -291,6 +299,7 @@ mod tests {
     type Result = std::result::Result<(), Box<dyn Error>>;
 
     // TODO: Refactor common code
+    // TODO: Tests on exotic block sizes
 
     /// Tests that we can read an external GPT layout,
     /// serialize it, and deserialize it again, with it staying the same.

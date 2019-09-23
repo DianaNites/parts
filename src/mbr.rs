@@ -53,8 +53,14 @@ impl ProtectiveMbr {
     }
 
     /// Write a GPT Protective MBR to a `Write`er.
-    pub(crate) fn to_writer<W: Write + Seek>(&self, dest: W) -> Result<()> {
-        Ok(bincode::serialize_into(dest, self).context(Parse)?)
+    pub(crate) fn to_writer<W: Write + Seek>(&self, mut dest: W, block_size: u64) -> Result<()> {
+        bincode::serialize_into(&mut dest, self).context(Parse)?;
+        // Account for reserved space.
+        let len = (block_size - 512) as usize;
+        let mut empty = Vec::with_capacity(len);
+        empty.resize(len, 0u8);
+        dest.write_all(&empty).context(Io)?;
+        Ok(())
     }
 
     fn validate(&self) -> Result<(), InnerError> {
