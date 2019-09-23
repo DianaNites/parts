@@ -131,8 +131,14 @@ impl GptHeader {
         Ok(())
     }
 
-    pub(crate) fn to_writer<W: Write>(&self, dest: W) -> Result<()> {
-        Ok(bincode::serialize_into(dest, self).context(Parse)?)
+    pub(crate) fn to_writer<W: Write>(&self, mut dest: W, block_size: u64) -> Result<()> {
+        bincode::serialize_into(&mut dest, self).context(Parse)?;
+        // Account for reserved space.
+        let len = (block_size - 92) as usize;
+        let mut empty = Vec::with_capacity(len);
+        empty.resize(len, 0u8);
+        dest.write_all(&empty).context(Io)?;
+        Ok(())
     }
 }
 
@@ -244,7 +250,7 @@ impl Gpt {
     pub fn to_writer<W: Write + Seek>(&self, mut dest: W) -> Result<()> {
         self.mbr.to_writer(&mut dest).context(MbrError)?;
 
-        self.header.to_writer(&mut dest)?;
+        self.header.to_writer(&mut dest, self.block_size)?;
 
         dest.seek(SeekFrom::Start(
             self.header.partition_array_start * self.block_size,
@@ -256,7 +262,7 @@ impl Gpt {
 
         dest.seek(SeekFrom::Start(self.header.alt_lba * self.block_size))
             .context(Io)?;
-        self.backup.to_writer(&mut dest)?;
+        self.backup.to_writer(&mut dest, self.block_size)?;
 
         dest.seek(SeekFrom::Start(
             self.backup.partition_array_start * self.block_size,
@@ -318,14 +324,9 @@ mod tests {
         let mut buf = Cursor::new(Vec::with_capacity(TEN_MIB_BYTES));
         src_gpt.to_writer(&mut buf).unwrap();
         //
-        // FIXME: difference of 420 bytes.
-        // Serializer is not accounting for trailing bytes.
-        //
-        // 10485760(expected) - 10485340(real) = 420
-        // 512 - 92 = 420?
         let v = buf.get_mut();
-        // v.resize(TEN_MIB_BYTES, 0);
         assert_eq!(v.len(), TEN_MIB_BYTES);
+        assert_eq!(v.len(), src_buf.len());
         assert_eq!(*v, src_buf);
         //
         Ok(())
