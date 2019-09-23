@@ -14,7 +14,10 @@ enum InnerError {
     Signature {},
 
     #[snafu(display("GPT Header Checksum Mismatch"))]
-    ChecksumMismatch {},
+    HeaderChecksumMismatch {},
+
+    #[snafu(display("GPT Partitions Checksum Mismatch"))]
+    PartitionsChecksumMismatch {},
 
     #[snafu(display("Error reading from device"))]
     Io { source: std::io::Error },
@@ -111,7 +114,7 @@ impl GptHeader {
         // Relies on serialization being correct.
         let source_bytes = bincode::serialize(&self).context(Parse)?;
         let crc = crc32::checksum_ieee(&source_bytes[..self.header_size as usize]);
-        ensure!(crc == old_crc, ChecksumMismatch);
+        ensure!(crc == old_crc, HeaderChecksumMismatch);
         self.header_crc32 = old_crc;
         //
         // TODO: Verify header::this_lba is correct
@@ -123,7 +126,7 @@ impl GptHeader {
         buf.resize(buf.capacity(), 0);
         source.read_exact(&mut buf).context(Io)?;
         let crc = crc32::checksum_ieee(&buf);
-        ensure!(crc == self.partitions_crc32, ChecksumMismatch);
+        ensure!(crc == self.partitions_crc32, PartitionsChecksumMismatch);
         //
         Ok(())
     }
