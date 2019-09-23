@@ -58,42 +58,9 @@ impl ProtectiveMbr {
                     start_lba: 0x01,
                     size_lba: u32::max_value(),
                 },
-                MbrPart {
-                    boot: 0,
-                    start_head: 0,
-                    start_sector: 0,
-                    start_track: 0,
-                    os_type: 0,
-                    end_head: 0,
-                    end_sector: 0,
-                    end_track: 0,
-                    start_lba: 0,
-                    size_lba: 0,
-                },
-                MbrPart {
-                    boot: 0,
-                    start_head: 0,
-                    start_sector: 0,
-                    start_track: 0,
-                    os_type: 0,
-                    end_head: 0,
-                    end_sector: 0,
-                    end_track: 0,
-                    start_lba: 0,
-                    size_lba: 0,
-                },
-                MbrPart {
-                    boot: 0,
-                    start_head: 0,
-                    start_sector: 0,
-                    start_track: 0,
-                    os_type: 0,
-                    end_head: 0,
-                    end_sector: 0,
-                    end_track: 0,
-                    start_lba: 0,
-                    size_lba: 0,
-                },
+                MbrPart::new(),
+                MbrPart::new(),
+                MbrPart::new(),
             ],
             signature: [0u8; 2],
         }
@@ -159,4 +126,21 @@ pub struct MbrPart {
     //
     start_lba: u32,
     size_lba: u32,
+}
+
+impl MbrPart {
+    fn new() -> Self {
+        MbrPart {
+            boot: 0,
+            start_head: 0,
+            start_sector: 0,
+            start_track: 0,
+            os_type: 0,
+            end_head: 0,
+            end_sector: 0,
+            end_track: 0,
+            start_lba: 0,
+            size_lba: 0,
+        }
+    }
 }
