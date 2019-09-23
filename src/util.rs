@@ -111,7 +111,7 @@ pub mod mbr_boot_code {
         T: AsRef<[u8]>,
     {
         let data = data.as_ref();
-        if data.len() >= MBR_BOOT_CODE_SIZE {
+        if data.len() > MBR_BOOT_CODE_SIZE {
             return Err(S::Error::custom("Invalid Boot Code, too long"));
         }
         //
