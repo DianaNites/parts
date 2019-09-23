@@ -270,3 +270,64 @@ impl Gpt {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Gpt;
+    use std::error::Error;
+    use std::io::prelude::*;
+    use std::io::Cursor;
+
+    static TEST_PARTS: &str = "tests/data/test_parts";
+    const BLOCK_SIZE: u64 = 512;
+    const TEN_MIB_BYTES: usize = 10485760;
+
+    type Result = std::result::Result<(), Box<dyn Error>>;
+
+    // TODO: Refactor common code
+
+    /// Tests that we can read an external GPT layout,
+    /// serialize it, and deserialize it again, with it staying the same.
+    #[test]
+    fn gpt_roundtrip() -> Result {
+        let mut file = std::fs::File::open(TEST_PARTS)?;
+        let mut src_buf = Vec::with_capacity(TEN_MIB_BYTES);
+        file.read_to_end(&mut src_buf)?;
+        //
+        let src_gpt = Gpt::from_reader(Cursor::new(&mut src_buf), BLOCK_SIZE)?;
+        //
+        let mut buf = Cursor::new(Vec::with_capacity(TEN_MIB_BYTES));
+        src_gpt.to_writer(&mut buf).unwrap();
+        buf.set_position(0);
+        //
+        let new_gpt = Gpt::from_reader(&mut buf, BLOCK_SIZE)?;
+        assert_eq!(src_gpt, new_gpt);
+        //
+        Ok(())
+    }
+
+    /// Tests that round-tripping gives us the exact bytes we got in
+    #[test]
+    fn exact_bytes() -> Result {
+        let mut file = std::fs::File::open(TEST_PARTS)?;
+        let mut src_buf = Vec::with_capacity(TEN_MIB_BYTES);
+        file.read_to_end(&mut src_buf)?;
+        //
+        let src_gpt = Gpt::from_reader(Cursor::new(&mut src_buf), BLOCK_SIZE)?;
+        //
+        let mut buf = Cursor::new(Vec::with_capacity(TEN_MIB_BYTES));
+        src_gpt.to_writer(&mut buf).unwrap();
+        //
+        // FIXME: difference of 420 bytes.
+        // Serializer is not accounting for trailing bytes.
+        //
+        // 10485760(expected) - 10485340(real) = 420
+        // 512 - 92 = 420?
+        let v = buf.get_mut();
+        // v.resize(TEN_MIB_BYTES, 0);
+        assert_eq!(v.len(), TEN_MIB_BYTES);
+        assert_eq!(*v, src_buf);
+        //
+        Ok(())
+    }
+}
