@@ -143,9 +143,7 @@ impl GptHeader {
     ) -> Result<(), InnerError> {
         ensure!(&self.signature == "EFI PART", Signature);
         let old_crc = std::mem::replace(&mut self.header_crc32, 0);
-        // Relies on serialization being correct.
-        let source_bytes = bincode::serialize(&self).context(Parse)?;
-        let crc = crc32::checksum_ieee(&source_bytes[..self.header_size as usize]);
+        let crc = self.calculate_crc()?;
         ensure!(crc == old_crc, HeaderChecksumMismatch);
         self.header_crc32 = old_crc;
         //
@@ -161,6 +159,14 @@ impl GptHeader {
         ensure!(crc == self.partitions_crc32, PartitionsChecksumMismatch);
         //
         Ok(())
+    }
+
+    fn calculate_crc(&self) -> Result<u32, InnerError> {
+        // Relies on serialization being correct.
+        let source_bytes = bincode::serialize(&self).context(Parse)?;
+        Ok(crc32::checksum_ieee(
+            &source_bytes[..self.header_size as usize],
+        ))
     }
 
     pub(crate) fn to_writer<W: Write>(&self, mut dest: W, block_size: u64) -> Result<()> {
@@ -265,6 +271,7 @@ impl GptPartBuilder {
         GptPart {
             partition_type_guid: u128::from_le_bytes(*self.partition_type_guid.as_bytes()),
             partition_guid: u128::from_le_bytes(*self.partition_guid.as_bytes()),
+            // FIXME: Partition starts
             starting_lba: self.start_lba,
             // FIXME: Is this correct?
             ending_lba: (self.size / self.block_size) - 1,
@@ -291,10 +298,33 @@ pub struct Gpt {
 
 impl Gpt {
     pub fn new(block_size: u64, disk_size: u64) -> Self {
+        let last_lba = disk_size / block_size;
+        //
+        let mut mbr = ProtectiveMbr::new();
+        mbr.set_part_lba(last_lba - 1);
+        //
+        let mut header = GptHeader::new();
+        header.this_lba = 1;
+        header.alt_lba = last_lba;
+        // TODO: Properly calculate from block_size?
+        header.first_usable_lba = 36;
+        header.last_usable_lba = last_lba - 35;
+        header.partition_array_start = 2;
+        header.header_crc32 = header.calculate_crc().unwrap();
+        //
+        let mut backup = GptHeader::new();
+        backup.this_lba = last_lba;
+        backup.alt_lba = 1;
+        // TODO: Properly calculate from block_size?
+        backup.first_usable_lba = 36;
+        backup.last_usable_lba = last_lba - 35;
+        backup.partition_array_start = backup.last_usable_lba;
+        backup.header_crc32 = backup.calculate_crc().unwrap();
+        //
         Self {
-            mbr: ProtectiveMbr::new(),
-            header: GptHeader::new(),
-            backup: GptHeader::new(),
+            mbr,
+            header,
+            backup,
             partitions: Vec::new(),
             block_size,
             disk_size,
@@ -389,7 +419,10 @@ impl Gpt {
     /// Adds a new partition
     pub fn add_partition(&mut self, part: GptPart) {
         self.partitions.push(part);
+        self.header.partitions = self.partitions.len() as u32;
+        self.backup.partitions = self.partitions.len() as u32;
         // TODO: Recalculate the header and partition CRC
+        // TODO: Use repr(C) for all structs and then just compare in memory?
     }
 }
 
@@ -455,13 +488,15 @@ mod tests {
     /// See tests/data/README.md for details on how the original was created.
     #[test]
     fn create_test_parts() -> Result {
-        let mut gpt = Gpt::new(BLOCK_SIZE);
+        let mut data = Cursor::new(vec![0; 10 * 1024usize.pow(2)]);
+        //
+        let mut gpt = Gpt::new(BLOCK_SIZE, data.get_ref().len() as u64);
         let part = GptPartBuilder::new(BLOCK_SIZE)
             .name("Test")
             .size(8 * 1024u64.pow(2))
             .finish();
         gpt.add_partition(part);
-        let mut data = Cursor::new(vec![0; 10 * 1024usize.pow(2)]);
+        //
         gpt.to_writer(&mut data)?;
         //
         let mut file = std::fs::File::open(TEST_PARTS)?;

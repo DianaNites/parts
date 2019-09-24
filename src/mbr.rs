@@ -100,6 +100,14 @@ impl ProtectiveMbr {
         );
         Ok(())
     }
+
+    pub(crate) fn set_part_lba(&mut self, lba: u64) {
+        self.partitions[0].size_lba = if lba > u32::max_value() as u64 {
+            u32::max_value()
+        } else {
+            lba as u32
+        };
+    }
 }
 
 impl std::fmt::Debug for ProtectiveMbr {
