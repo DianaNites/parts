@@ -98,6 +98,7 @@ impl ProtectiveMbr {
             self.signature[0] == 0x55 && self.signature[1] == 0xAA,
             Signature
         );
+        // TODO: Make sure other partitions are empty.
         Ok(())
     }
 
