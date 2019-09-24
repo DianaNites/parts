@@ -350,6 +350,7 @@ impl Gpt {
         for _ in 0..header.partitions {
             let part = GptPart::from_reader(&mut source, header.partition_size)?;
             // Ignore unused partitions, so partitions isn't cluttered.
+            // Shouldn't cause any problems since unused partitions are all zeros.
             if part.partition_type_guid != 0 {
                 partitions.push(part);
             }
@@ -421,6 +422,9 @@ impl Gpt {
         self.partitions.push(part);
         self.header.partitions = self.partitions.len() as u32;
         self.backup.partitions = self.partitions.len() as u32;
+        //
+        self.header.header_crc32 = self.header.calculate_crc().unwrap();
+        self.backup.header_crc32 = self.backup.calculate_crc().unwrap();
         // TODO: Recalculate the header and partition CRC
         // TODO: Use repr(C) for all structs and then just compare in memory?
     }
