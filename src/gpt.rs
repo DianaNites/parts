@@ -462,10 +462,10 @@ impl Gpt {
             block_size,
             disk_size,
         };
-        if b_err || h_err {
-            CorruptGpt { gpt }.fail().map_err(Into::into)
-        } else {
-            Ok(gpt)
+        match (b_err, h_err) {
+            (true, true) => InvalidGptHeader.fail().map_err(Into::into),
+            (false, false) => Ok(gpt),
+            (_, _) => CorruptGpt { gpt }.fail().map_err(Into::into),
         }
     }
 
