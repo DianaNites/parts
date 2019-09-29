@@ -12,6 +12,9 @@ enum InnerError {
     #[snafu(display("Invalid MBR Signature"))]
     Signature {},
 
+    #[snafu(display("Not a Protective MBR, has other partitions"))]
+    Validation {},
+
     #[snafu(display("Error parsing MBR Header structure"))]
     Parse { source: bincode::Error },
 
@@ -23,7 +26,7 @@ type Result<T, E = MbrError> = std::result::Result<T, E>;
 
 /// GPT Protective MBR
 #[derive(Serialize, Deserialize, PartialEq)]
-pub struct ProtectiveMbr {
+pub(crate) struct ProtectiveMbr {
     #[serde(with = "mbr_boot_code")]
     boot_code: Vec<u8>,
 
@@ -49,7 +52,7 @@ impl ProtectiveMbr {
                     start_track: 0x00,
                     //
                     os_type: 0xEE,
-                    // NOTE: Actually calculate these or does it matter?
+                    // Existing implementations seem to do the same thing here.
                     end_head: 0xFF,
                     end_sector: 0xFF,
                     end_track: 0xFF,
@@ -61,9 +64,9 @@ impl ProtectiveMbr {
                         last_lba as u32
                     },
                 },
-                MbrPart::new(),
-                MbrPart::new(),
-                MbrPart::new(),
+                MbrPart::default(),
+                MbrPart::default(),
+                MbrPart::default(),
             ],
             signature: [0u8; 2],
         }
@@ -101,7 +104,9 @@ impl ProtectiveMbr {
             self.signature[0] == 0x55 && self.signature[1] == 0xAA,
             Signature
         );
-        // TODO: Make sure other partitions are empty.
+        for part in &self.partitions {
+            ensure!(*part == MbrPart::default(), Validation);
+        }
         Ok(())
     }
 }
@@ -114,8 +119,8 @@ impl std::fmt::Debug for ProtectiveMbr {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub struct MbrPart {
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
+struct MbrPart {
     boot: u8,
     // CHS
     start_head: u8,
@@ -130,21 +135,4 @@ pub struct MbrPart {
     //
     start_lba: u32,
     size_lba: u32,
-}
-
-impl MbrPart {
-    fn new() -> Self {
-        MbrPart {
-            boot: 0,
-            start_head: 0,
-            start_sector: 0,
-            start_track: 0,
-            os_type: 0,
-            end_head: 0,
-            end_sector: 0,
-            end_track: 0,
-            start_lba: 0,
-            size_lba: 0,
-        }
-    }
 }
