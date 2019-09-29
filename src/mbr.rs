@@ -34,9 +34,8 @@ pub struct ProtectiveMbr {
 }
 
 impl ProtectiveMbr {
-    /// Creates a new Protective MBR, valid EXCEPT for
-    /// `size_lba`, which MUST be set properly before writing this out.
-    pub(crate) fn new() -> Self {
+    /// Creates a new Protective MBR
+    pub(crate) fn new(last_lba: u64) -> Self {
         Self {
             boot_code: vec![0; 440],
             unique_signature: [0u8; 4],
@@ -50,13 +49,17 @@ impl ProtectiveMbr {
                     start_track: 0x00,
                     //
                     os_type: 0xEE,
-                    // TODO: Actually calculate these or does it matter?
+                    // NOTE: Actually calculate these or does it matter?
                     end_head: 0xFF,
                     end_sector: 0xFF,
                     end_track: 0xFF,
                     //
                     start_lba: 0x01,
-                    size_lba: u32::max_value(),
+                    size_lba: if last_lba > u32::max_value() as u64 {
+                        u32::max_value()
+                    } else {
+                        last_lba as u32
+                    },
                 },
                 MbrPart::new(),
                 MbrPart::new(),
@@ -100,14 +103,6 @@ impl ProtectiveMbr {
         );
         // TODO: Make sure other partitions are empty.
         Ok(())
-    }
-
-    pub(crate) fn set_part_lba(&mut self, lba: u64) {
-        self.partitions[0].size_lba = if lba > u32::max_value() as u64 {
-            u32::max_value()
-        } else {
-            lba as u32
-        };
     }
 }
 

@@ -332,8 +332,7 @@ impl Gpt {
     pub fn new(block_size: u64, disk_size: u64) -> Self {
         let last_lba = disk_size / block_size;
         //
-        let mut mbr = ProtectiveMbr::new();
-        mbr.set_part_lba(last_lba - 1);
+        let mbr = ProtectiveMbr::new(last_lba);
         //
         let mut header = GptHeader::new();
         header.this_lba = 1;
