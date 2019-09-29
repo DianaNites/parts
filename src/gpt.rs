@@ -2,7 +2,7 @@
 use crate::{mbr::*, util::*};
 use crc::crc32;
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, ResultExt, Snafu};
+use snafu::{ensure, OptionExt, ResultExt, Snafu};
 use std::io::{prelude::*, SeekFrom};
 use uuid::Uuid;
 
@@ -31,13 +31,83 @@ enum InnerError {
 
     #[snafu(display("Invalid Block Size: Must be power of 2"))]
     BlockSize {},
+
+    #[snafu(display("The GPT Table is invalid and can't be written"))]
+    InvalidGpt {},
+
+    #[snafu(display("The GPT Header is invalid and can't be read."))]
+    InvalidGptHeader {},
 }
 
 type Result<T, E = GptError> = std::result::Result<T, E>;
 
+/// Check the validity of a GPT Header
+///
+/// ## Arguments
+///
+/// - `header`, the GptHeader to validate. Despite being `&mut`,
+///     this won't be visibly modified.
+/// - `source`, the `Read`er for the device.
+///     The position of this is expected to be directly after the GPT Header.
+/// - `block_size`, devices block size.
+///
+/// ## Errors
+///
+/// - If the header is invalid
+/// - If calculating the CRC fails.
+///
+/// ## Details
+///
+/// - Verifies the Signature is "EFI PART".
+/// - Verifies the Header CRC is correct.
+/// - Verifies that `this_lba` is correct.
+/// - Verifies the Partition Entry Array CRC.
+///
+/// The position of `source` is unspecified after this call.
+fn check_validity<RS: Read + Seek>(
+    header: &mut GptHeader,
+    mut source: RS,
+    block_size: u64,
+) -> Result<(), InnerError> {
+    ensure!(&header.signature == "EFI PART", Signature);
+    let old_crc = std::mem::replace(&mut header.header_crc32, 0);
+    let crc = calculate_crc(header)?;
+    header.header_crc32 = old_crc;
+    ensure!(crc == old_crc, HeaderChecksumMismatch);
+    //
+    let current_lba = source.seek(SeekFrom::Current(0)).context(Io)? / block_size;
+    dbg!(current_lba, header.this_lba);
+    ensure!(header.this_lba == current_lba, InvalidGptHeader);
+    //
+    source
+        .seek(SeekFrom::Start(header.partition_array_start * block_size))
+        .context(Io)?;
+    let mut buf: Vec<u8> = Vec::with_capacity((header.partitions * header.partition_size) as usize);
+    buf.resize(buf.capacity(), 0);
+    source.read_exact(&mut buf).context(Io)?;
+    let crc = crc32::checksum_ieee(&buf);
+    ensure!(crc == header.partitions_crc32, PartitionsChecksumMismatch);
+    //
+    Ok(())
+}
+
+/// Calculate the Header CRC for a `GptHeader`.
+///
+/// ## Errors
+///
+/// - If bincode does.
+fn calculate_crc(header: &GptHeader) -> Result<u32, InnerError> {
+    // Relies on serialization being correct.
+    // TODO: Use `repr(C)` for `GptHeader` and just look at memory?
+    let source_bytes = bincode::serialize(&header).context(Parse)?;
+    Ok(crc32::checksum_ieee(
+        &source_bytes[..header.header_size as usize],
+    ))
+}
+
 /// The GPT Header Structure
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub struct GptHeader {
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+struct GptHeader {
     /// Hard-coded to "EFI PART"
     #[serde(with = "signature")]
     signature: String,
@@ -120,53 +190,8 @@ impl GptHeader {
     /// The `Read`ers current position is undefined after this call.
     ///
     /// `block_size` is the device's logical block size.
-    pub(crate) fn from_reader<R: Read + Seek>(mut source: R, block_size: u64) -> Result<Self> {
-        let mut obj: GptHeader = bincode::deserialize_from(&mut source).context(Parse)?;
-        obj.check_validity(source, block_size)?;
-        Ok(obj)
-    }
-
-    /// Checks the validity of the header
-    ///
-    /// # Errors
-    ///
-    /// The position of `source` is undefined on error.
-    /// If it's important, save it.
-    ///
-    /// # Details
-    ///
-    /// Checks the Signature, header CRC, and partition array CRC.
-    fn check_validity<R: Read + Seek>(
-        &mut self,
-        mut source: R,
-        block_size: u64,
-    ) -> Result<(), InnerError> {
-        ensure!(&self.signature == "EFI PART", Signature);
-        let old_crc = std::mem::replace(&mut self.header_crc32, 0);
-        let crc = self.calculate_crc()?;
-        ensure!(crc == old_crc, HeaderChecksumMismatch);
-        self.header_crc32 = old_crc;
-        //
-        // TODO: Verify header::this_lba is correct
-        //
-        source
-            .seek(SeekFrom::Start(self.partition_array_start * block_size))
-            .context(Io)?;
-        let mut buf: Vec<u8> = Vec::with_capacity((self.partitions * self.partition_size) as usize);
-        buf.resize(buf.capacity(), 0);
-        source.read_exact(&mut buf).context(Io)?;
-        let crc = crc32::checksum_ieee(&buf);
-        ensure!(crc == self.partitions_crc32, PartitionsChecksumMismatch);
-        //
-        Ok(())
-    }
-
-    fn calculate_crc(&self) -> Result<u32, InnerError> {
-        // Relies on serialization being correct.
-        let source_bytes = bincode::serialize(&self).context(Parse)?;
-        Ok(crc32::checksum_ieee(
-            &source_bytes[..self.header_size as usize],
-        ))
+    pub(crate) fn from_reader<R: Read>(mut source: R, block_size: u64) -> Result<Self> {
+        Ok(bincode::deserialize_from(&mut source).context(Parse)?)
     }
 
     pub(crate) fn to_writer<W: Write>(&self, mut dest: W, block_size: u64) -> Result<()> {
@@ -285,9 +310,16 @@ impl GptPartBuilder {
 #[derive(Debug, PartialEq)]
 pub struct Gpt {
     mbr: ProtectiveMbr,
-    header: GptHeader,
-    backup: GptHeader,
+
+    /// Can be None if corrupt
+    header: Option<GptHeader>,
+
+    /// Can be None if corrupt
+    backup: Option<GptHeader>,
+
     partitions: Vec<GptPart>,
+
+    backup_partitions: Vec<GptPart>,
 
     /// The devices block size. ex, 512, 4096
     block_size: u64,
@@ -310,7 +342,7 @@ impl Gpt {
         header.first_usable_lba = 36;
         header.last_usable_lba = last_lba - 35;
         header.partition_array_start = 2;
-        header.header_crc32 = header.calculate_crc().unwrap();
+        // header.header_crc32 = header.calculate_crc().unwrap();
         //
         let mut backup = GptHeader::new();
         backup.this_lba = last_lba;
@@ -319,21 +351,40 @@ impl Gpt {
         backup.first_usable_lba = 36;
         backup.last_usable_lba = last_lba - 35;
         backup.partition_array_start = backup.last_usable_lba;
-        backup.header_crc32 = backup.calculate_crc().unwrap();
+        // backup.header_crc32 = backup.calculate_crc().unwrap();
+        //
+        let header = Some(header);
+        let backup = Some(backup);
         //
         Self {
             mbr,
             header,
             backup,
             partitions: Vec::new(),
+            backup_partitions: Vec::new(),
             block_size,
             disk_size,
         }
     }
 
-    /// Read from an existing GPT Disk
+    /// Read from an existing GPT Disk or image.
     ///
-    /// `block_size` is the devices logical block size. ex: 512, 4096
+    /// ## Arguments
+    ///
+    /// - `block_size` is the devices logical block size. ex: 512, 4096
+    ///
+    /// ## Errors
+    ///
+    /// - If IO fails.
+    /// - If the Protective MBR is invalid.
+    /// - If the primary or backup GPT is invalid.
+    ///
+    /// ### Invalid GPT Headers
+    ///
+    /// In this case the `Err` variant will contain a `Gpt` Instance,
+    /// which should be repaired after asking permission from the user.
+    ///
+    /// If both the primary and backup GPT is corrupt, repairing will not be possible.
     pub fn from_reader<RS>(mut source: RS, block_size: u64) -> Result<Self>
     where
         RS: Read + Seek,
@@ -341,28 +392,71 @@ impl Gpt {
         if !block_size.is_power_of_two() {
             return BlockSize.fail().map_err(|e| e.into());
         }
+        //
+        let disk_size = source.seek(SeekFrom::End(0)).context(Io)?;
+        source.seek(SeekFrom::Start(0)).context(Io)?;
+        //
         let mbr = ProtectiveMbr::from_reader(&mut source, block_size).context(MbrError)?;
-        let header = GptHeader::from_reader(&mut source, block_size)?;
-        let mut partitions = Vec::with_capacity(header.partitions as usize);
-        source
-            .seek(SeekFrom::Start(header.partition_array_start * block_size))
-            .context(Io)?;
-        for _ in 0..header.partitions {
-            let part = GptPart::from_reader(&mut source, header.partition_size)?;
-            // Ignore unused partitions, so partitions isn't cluttered.
-            // Shouldn't cause any problems since unused partitions are all zeros.
-            if part.partition_type_guid != 0 {
-                partitions.push(part);
+        let header = GptHeader::from_reader(&mut source, block_size)
+            .map(|x| Some(x))
+            .unwrap_or(None)
+            .and_then(|mut x| {
+                if let Ok(_) = dbg!(check_validity(&mut x, &mut source, block_size)) {
+                    Some(x)
+                } else {
+                    None
+                }
+            });
+
+        let mut partitions = Vec::new();
+
+        if let Some(header) = &header {
+            source
+                .seek(SeekFrom::Start(header.partition_array_start * block_size))
+                .context(Io)?;
+            partitions.reserve_exact(header.partitions as usize);
+            for _ in 0..header.partitions {
+                let part = GptPart::from_reader(&mut source, header.partition_size)?;
+                // Ignore unused partitions, so `partitions` isn't cluttered.
+                // Shouldn't cause any problems since unused partitions are all zeros.
+                if part.partition_type_guid != 0 {
+                    partitions.push(part);
+                }
+            }
+            source
+                .seek(SeekFrom::Start(header.alt_lba * block_size))
+                .context(Io)?;
+        } else {
+            source
+                .seek(SeekFrom::End(-(block_size as i64)))
+                .context(Io)?;
+        }
+        //
+        let backup = GptHeader::from_reader(&mut source, block_size)
+            .map(|x| Some(x))
+            .unwrap_or(None)
+            .and_then(|mut x| {
+                if let Ok(_) = dbg!(check_validity(&mut x, &mut source, block_size)) {
+                    Some(x)
+                } else {
+                    None
+                }
+            });
+        let mut backup_partitions = Vec::new();
+        if let Some(backup) = &backup {
+            source
+                .seek(SeekFrom::Start(backup.partition_array_start * block_size))
+                .context(Io)?;
+            backup_partitions.reserve_exact(backup.partitions as usize);
+            for _ in 0..backup.partitions {
+                let part = GptPart::from_reader(&mut source, backup.partition_size)?;
+                // Ignore unused partitions, so `partitions` isn't cluttered.
+                // Shouldn't cause any problems since unused partitions are all zeros.
+                if part.partition_type_guid != 0 {
+                    backup_partitions.push(part);
+                }
             }
         }
-        // TODO: Properly handle primary and backup header.
-        // Read the backup
-        source
-            .seek(SeekFrom::Start(header.alt_lba * block_size))
-            .context(Io)?;
-        //
-        let backup = GptHeader::from_reader(&mut source, block_size)?;
-        let disk_size = source.seek(SeekFrom::End(0)).context(Io)?;
 
         //
         Ok(Self {
@@ -371,6 +465,7 @@ impl Gpt {
             header,
             backup,
             partitions,
+            backup_partitions,
             block_size,
             disk_size,
         })
@@ -382,30 +477,33 @@ impl Gpt {
 
     /// Write the GPT structure to a `Write`er.
     pub fn to_writer<W: Write + Seek>(&self, mut dest: W) -> Result<()> {
+        let header = self.header.as_ref().context(InvalidGpt)?;
+        let backup = self.backup.as_ref().context(InvalidGpt)?;
+        //
         self.mbr
             .to_writer(&mut dest, self.block_size)
             .context(MbrError)?;
 
-        self.header.to_writer(&mut dest, self.block_size)?;
+        header.to_writer(&mut dest, self.block_size)?;
 
         dest.seek(SeekFrom::Start(
-            self.header.partition_array_start * self.block_size,
+            header.partition_array_start * self.block_size,
         ))
         .context(Io)?;
         for part in &self.partitions {
-            part.to_writer(&mut dest, self.header.partition_size)?;
+            part.to_writer(&mut dest, header.partition_size)?;
         }
 
-        dest.seek(SeekFrom::Start(self.header.alt_lba * self.block_size))
+        dest.seek(SeekFrom::Start(header.alt_lba * self.block_size))
             .context(Io)?;
-        self.backup.to_writer(&mut dest, self.block_size)?;
+        backup.to_writer(&mut dest, self.block_size)?;
 
         dest.seek(SeekFrom::Start(
-            self.backup.partition_array_start * self.block_size,
+            backup.partition_array_start * self.block_size,
         ))
         .context(Io)?;
         for part in &self.partitions {
-            part.to_writer(&mut dest, self.backup.partition_size)?;
+            part.to_writer(&mut dest, backup.partition_size)?;
         }
 
         //
@@ -420,11 +518,9 @@ impl Gpt {
     /// Adds a new partition
     pub fn add_partition(&mut self, part: GptPart) {
         self.partitions.push(part);
-        self.header.partitions = self.partitions.len() as u32;
-        self.backup.partitions = self.partitions.len() as u32;
+        // self.header.partitions = self.partitions.len() as u32;
         //
-        self.header.header_crc32 = self.header.calculate_crc().unwrap();
-        self.backup.header_crc32 = self.backup.calculate_crc().unwrap();
+        // self.header.header_crc32 = self.header.calculate_crc().unwrap();
         // TODO: Recalculate the header and partition CRC
         // TODO: Use repr(C) for all structs and then just compare in memory?
     }
