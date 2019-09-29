@@ -76,7 +76,6 @@ fn check_validity<RS: Read + Seek>(
     ensure!(crc == old_crc, HeaderChecksumMismatch);
     //
     let current_lba = source.seek(SeekFrom::Current(0)).context(Io)? / block_size;
-    dbg!(current_lba, header.this_lba);
     ensure!(header.this_lba == current_lba, InvalidGptHeader);
     //
     source
@@ -401,7 +400,7 @@ impl Gpt {
             .map(|x| Some(x))
             .unwrap_or(None)
             .and_then(|mut x| {
-                if let Ok(_) = dbg!(check_validity(&mut x, &mut source, block_size)) {
+                if let Ok(_) = check_validity(&mut x, &mut source, block_size) {
                     Some(x)
                 } else {
                     None
@@ -436,7 +435,7 @@ impl Gpt {
             .map(|x| Some(x))
             .unwrap_or(None)
             .and_then(|mut x| {
-                if let Ok(_) = dbg!(check_validity(&mut x, &mut source, block_size)) {
+                if let Ok(_) = check_validity(&mut x, &mut source, block_size) {
                     Some(x)
                 } else {
                     None
