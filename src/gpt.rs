@@ -139,7 +139,8 @@ struct GptHeader {
     last_usable_lba: u64,
 
     /// Disk GUID
-    disk_guid: u128,
+    #[serde(with = "uuid::adapter::compact")]
+    disk_guid: Uuid,
 
     /// Where our partition array starts on disk.
     partition_array_start: u64,
@@ -179,7 +180,7 @@ impl GptHeader {
             alt_lba: Default::default(),
             first_usable_lba: Default::default(),
             last_usable_lba: Default::default(),
-            disk_guid: u128::from_le_bytes(*Uuid::new_v4().as_bytes()),
+            disk_guid: Uuid::new_v4(),
             partition_array_start: Default::default(),
             partitions: Default::default(),
             partition_size: 128,
