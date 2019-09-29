@@ -37,6 +37,9 @@ enum InnerError {
 
     #[snafu(display("The GPT Header is invalid and can't be read."))]
     InvalidGptHeader {},
+
+    #[snafu(display("The GPT Table is corrupt, but can be repaired."))]
+    CorruptGpt { gpt: Gpt },
 }
 
 type Result<T, E = GptError> = std::result::Result<T, E>;
@@ -318,8 +321,6 @@ pub struct Gpt {
 
     partitions: Vec<GptPart>,
 
-    backup_partitions: Vec<GptPart>,
-
     /// The devices block size. ex, 512, 4096
     block_size: u64,
 
@@ -360,7 +361,6 @@ impl Gpt {
             header,
             backup,
             partitions: Vec::new(),
-            backup_partitions: Vec::new(),
             block_size,
             disk_size,
         }
@@ -396,20 +396,17 @@ impl Gpt {
         source.seek(SeekFrom::Start(0)).context(Io)?;
         //
         let mbr = ProtectiveMbr::from_reader(&mut source, block_size).context(MbrError)?;
-        let header = GptHeader::from_reader(&mut source, block_size)
-            .map(|x| Some(x))
-            .unwrap_or(None)
-            .and_then(|mut x| {
-                if let Ok(_) = check_validity(&mut x, &mut source, block_size) {
-                    Some(x)
-                } else {
-                    None
-                }
-            });
+        let header = GptHeader::from_reader(&mut source, block_size).and_then(|mut x| {
+            //
+            match check_validity(&mut x, &mut source, block_size) {
+                Ok(_) => Ok(x),
+                Err(e) => Err(e.into()),
+            }
+        });
 
         let mut partitions = Vec::new();
 
-        if let Some(header) = &header {
+        if let Ok(header) = &header {
             source
                 .seek(SeekFrom::Start(header.partition_array_start * block_size))
                 .context(Io)?;
@@ -431,43 +428,46 @@ impl Gpt {
                 .context(Io)?;
         }
         //
-        let backup = GptHeader::from_reader(&mut source, block_size)
-            .map(|x| Some(x))
-            .unwrap_or(None)
-            .and_then(|mut x| {
-                if let Ok(_) = check_validity(&mut x, &mut source, block_size) {
-                    Some(x)
-                } else {
-                    None
-                }
-            });
-        let mut backup_partitions = Vec::new();
-        if let Some(backup) = &backup {
+        let backup = GptHeader::from_reader(&mut source, block_size).and_then(|mut x| {
+            //
+            match check_validity(&mut x, &mut source, block_size) {
+                Ok(_) => Ok(x),
+                Err(e) => Err(e.into()),
+            }
+        });
+
+        if let Ok(backup) = &backup {
             source
                 .seek(SeekFrom::Start(backup.partition_array_start * block_size))
                 .context(Io)?;
-            backup_partitions.reserve_exact(backup.partitions as usize);
-            for _ in 0..backup.partitions {
-                let part = GptPart::from_reader(&mut source, backup.partition_size)?;
-                // Ignore unused partitions, so `partitions` isn't cluttered.
-                // Shouldn't cause any problems since unused partitions are all zeros.
-                if part.partition_type_guid != 0 {
-                    backup_partitions.push(part);
+            if header.is_err() {
+                partitions.reserve_exact(backup.partitions as usize);
+                for _ in 0..backup.partitions {
+                    let part = GptPart::from_reader(&mut source, backup.partition_size)?;
+                    // Ignore unused partitions, so `partitions` isn't cluttered.
+                    // Shouldn't cause any problems since unused partitions are all zeros.
+                    if part.partition_type_guid != 0 {
+                        partitions.push(part);
+                    }
                 }
             }
         }
+        let (b_err, h_err) = (backup.is_err(), header.is_err());
 
-        //
-        Ok(Self {
+        let gpt = Self {
             //
             mbr,
-            header,
-            backup,
+            header: header.map(Some).unwrap_or(None),
+            backup: backup.map(Some).unwrap_or(None),
             partitions,
-            backup_partitions,
             block_size,
             disk_size,
-        })
+        };
+        if b_err || h_err {
+            CorruptGpt { gpt }.fail().map_err(Into::into)
+        } else {
+            Ok(gpt)
+        }
     }
 
     pub fn from_file() -> Self {
