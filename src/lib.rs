@@ -1,7 +1,7 @@
 //! parts
 
-pub mod gpt;
-pub mod mbr;
-pub mod util;
+mod gpt;
+mod mbr;
+mod util;
 
 pub use gpt::*;
