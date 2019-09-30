@@ -4,7 +4,7 @@
 ///
 /// Handles the conversion to/from UCS-2, currently by assuming it's valid UTF-16.
 ///
-/// Supports serializing from anything that implements `AsRef<[u8]>`,
+/// Supports serializing from anything that implements `AsRef<str>`,
 /// and deserializing to `String`
 pub mod partition_name {
     use serde::{
