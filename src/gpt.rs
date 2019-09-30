@@ -95,6 +95,8 @@ fn check_validity<RS: Read + Seek>(
 
 /// Calculate the Header CRC for a `GptHeader`.
 ///
+/// `GptHeader::header_crc` MUST be zero for this to be correct.
+///
 /// ## Errors
 ///
 /// - If bincode does.
@@ -164,13 +166,10 @@ impl GptHeader {
     /// - `first_usable_lba`
     /// - `last_usable_lba`
     /// - `partition_array_start`
-    /// - `partitions`
-    /// - `header_crc32`
-    /// - `partitions_crc32`
     ///
     /// All of which MUST be properly calculated before this is written out.
     pub(crate) fn new() -> Self {
-        Self {
+        let mut header = Self {
             signature: "EFI PART".into(),
             revision: 0x00010000,
             header_size: 92,
@@ -185,7 +184,9 @@ impl GptHeader {
             partitions: Default::default(),
             partition_size: 128,
             partitions_crc32: Default::default(),
-        }
+        };
+        header.header_crc32 = calculate_crc(&header).unwrap();
+        header
     }
 
     /// Read the GPT Header from a `Read`er.
@@ -342,7 +343,6 @@ impl Gpt {
         header.first_usable_lba = 36;
         header.last_usable_lba = last_lba - 35;
         header.partition_array_start = 2;
-        // header.header_crc32 = header.calculate_crc().unwrap();
         //
         let mut backup = GptHeader::new();
         backup.this_lba = last_lba;
@@ -351,7 +351,6 @@ impl Gpt {
         backup.first_usable_lba = 36;
         backup.last_usable_lba = last_lba - 35;
         backup.partition_array_start = backup.last_usable_lba;
-        // backup.header_crc32 = backup.calculate_crc().unwrap();
         //
         let header = Some(header);
         let backup = Some(backup);
@@ -384,6 +383,10 @@ impl Gpt {
     /// which should be repaired after asking permission from the user.
     ///
     /// If both the primary and backup GPT is corrupt, repairing will not be possible.
+    ///
+    /// ## Panics
+    ///
+    /// - If the Gpt Instance is invalid, other methods may panic.
     pub fn from_reader<RS>(mut source: RS, block_size: u64) -> Result<Self>
     where
         RS: Read + Seek,
@@ -517,10 +520,11 @@ impl Gpt {
     /// Adds a new partition
     pub fn add_partition(&mut self, part: GptPart) {
         self.partitions.push(part);
-        // self.header.partitions = self.partitions.len() as u32;
+        let header = self.header.as_mut().unwrap();
+        header.partitions += 1;
+        header.header_crc32 = calculate_crc(&header).unwrap();
         //
-        // self.header.header_crc32 = self.header.calculate_crc().unwrap();
-        // TODO: Recalculate the header and partition CRC
+        // FIXME: Not currently possible to calculate partitions crc
         // TODO: Use repr(C) for all structs and then just compare in memory?
     }
 }
