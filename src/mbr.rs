@@ -1,5 +1,5 @@
 //! MBR definitions
-use crate::util::*;
+use generic_array::{typenum::U440, GenericArray};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt, Snafu};
 use std::io::{prelude::*, SeekFrom};
@@ -25,8 +25,7 @@ type Result<T, E = MbrError> = std::result::Result<T, E>;
 #[derive(Serialize, Deserialize, PartialEq)]
 pub(crate) struct ProtectiveMbr {
     /// Bios boot code. Unused by GPT.
-    #[serde(with = "mbr_boot_code")]
-    boot_code: Vec<u8>,
+    boot_code: GenericArray<u8, U440>,
 
     /// A unique signature. Unused by GPT.
     /// Hard-coded to 0.
@@ -51,7 +50,7 @@ impl ProtectiveMbr {
     pub(crate) fn new(last_lba: u64) -> Self {
         let last_lba = last_lba - 1;
         Self {
-            boot_code: vec![0; 440],
+            boot_code: GenericArray::default(),
             unique_signature: [0u8; 4],
             unknown: [0u8; 2],
             partitions: [
