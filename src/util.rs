@@ -44,9 +44,9 @@ pub mod partition_name {
         // Using u32 because of technical limitations, array impls limited to 32.
         // 72 / 4 == 18
         let bytes: [u32; 18] = <[u32; 18]>::deserialize(deserializer)?;
-        // Partition names are UCS-2
-        let bytes: *const [u16; 36] = &bytes as *const [u32; 18] as *const [u16; 36];
-        let bytes: [u16; 36] = unsafe { *bytes };
+        // Partition names are UTF-16
+        let bytes = &bytes[0] as *const u32 as *const u16;
+        let bytes = unsafe { std::slice::from_raw_parts(bytes, 36) };
         //
         let mut s = String::from_utf16(&bytes).map_err(D::Error::custom)?;
         // Strip nul bytes
