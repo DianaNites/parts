@@ -45,6 +45,8 @@ enum InnerError {
 
 type Result<T, E = GptError> = std::result::Result<T, E>;
 
+const EFI_PART: u64 = 0x5452415020494645;
+
 /// Check the validity of a GPT Header
 ///
 /// ## Arguments
@@ -73,7 +75,7 @@ fn check_validity<RS: Read + Seek>(
     mut source: RS,
     block_size: u64,
 ) -> Result<(), InnerError> {
-    ensure!(&header.signature == "EFI PART", Signature);
+    ensure!(header.signature == EFI_PART, Signature);
     let old_crc = std::mem::replace(&mut header.header_crc32, 0);
     let crc = calculate_crc(header)?;
     header.header_crc32 = old_crc;
@@ -113,9 +115,9 @@ fn calculate_crc(header: &GptHeader) -> Result<u32, InnerError> {
 /// The GPT Header Structure
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 struct GptHeader {
-    /// Hard-coded to "EFI PART"
-    #[serde(with = "signature")]
-    signature: String,
+    /// Hard-coded to "EFI PART",
+    /// or the 64-bit constant 0x5452415020494645
+    signature: u64,
 
     /// Currently hard-coded to `1.0`/`0x00010000`, but may change?
     revision: u32,
@@ -171,7 +173,7 @@ impl GptHeader {
     /// All of which MUST be properly calculated before this is written out.
     pub(crate) fn new() -> Self {
         let mut header = Self {
-            signature: "EFI PART".into(),
+            signature: EFI_PART,
             revision: 0x0001_0000,
             header_size: 92,
             header_crc32: Default::default(),
