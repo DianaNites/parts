@@ -45,7 +45,7 @@ enum InnerError {
 
 type Result<T, E = GptError> = std::result::Result<T, E>;
 
-const EFI_PART: u64 = 0x5452415020494645;
+const EFI_PART: u64 = 0x5452_4150_2049_4645;
 
 /// Check the validity of a GPT Header
 ///
