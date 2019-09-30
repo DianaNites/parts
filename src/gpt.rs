@@ -10,6 +10,7 @@ use uuid::Uuid;
 pub struct GptError(InnerError);
 
 #[derive(Debug, Snafu)]
+#[allow(clippy::large_enum_variant)]
 enum InnerError {
     #[snafu(display("Invalid GPT Header Signature"))]
     Signature {},
@@ -171,7 +172,7 @@ impl GptHeader {
     pub(crate) fn new() -> Self {
         let mut header = Self {
             signature: "EFI PART".into(),
-            revision: 0x00010000,
+            revision: 0x0001_0000,
             header_size: 92,
             header_crc32: Default::default(),
             _reserved: Default::default(),
@@ -192,9 +193,7 @@ impl GptHeader {
     /// Read the GPT Header from a `Read`er.
     ///
     /// The `Read`ers current position is undefined after this call.
-    ///
-    /// `block_size` is the device's logical block size.
-    pub(crate) fn from_reader<R: Read>(mut source: R, block_size: u64) -> Result<Self> {
+    pub(crate) fn from_reader<R: Read>(mut source: R) -> Result<Self> {
         Ok(bincode::deserialize_from(&mut source).context(Parse)?)
     }
 
@@ -399,7 +398,7 @@ impl Gpt {
         source.seek(SeekFrom::Start(0)).context(Io)?;
         //
         let mbr = ProtectiveMbr::from_reader(&mut source, block_size).context(MbrError)?;
-        let header = GptHeader::from_reader(&mut source, block_size).and_then(|mut x| {
+        let header = GptHeader::from_reader(&mut source).and_then(|mut x| {
             //
             match check_validity(&mut x, &mut source, block_size) {
                 Ok(_) => Ok(x),
@@ -431,7 +430,7 @@ impl Gpt {
                 .context(Io)?;
         }
         //
-        let backup = GptHeader::from_reader(&mut source, block_size).and_then(|mut x| {
+        let backup = GptHeader::from_reader(&mut source).and_then(|mut x| {
             //
             match check_validity(&mut x, &mut source, block_size) {
                 Ok(_) => Ok(x),

@@ -69,7 +69,7 @@ impl ProtectiveMbr {
                     end_track: 0xFF,
                     //
                     start_lba: 0x01,
-                    size_lba: if last_lba > u32::max_value() as u64 {
+                    size_lba: if last_lba > u64::from(u32::max_value()) {
                         u32::max_value()
                     } else {
                         last_lba as u32
