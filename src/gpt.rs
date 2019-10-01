@@ -47,6 +47,7 @@ enum InnerError {
 type Result<T, E = GptError> = std::result::Result<T, E>;
 
 const EFI_PART: u64 = 0x5452_4150_2049_4645;
+const MIN_PARTITIONS_BYTES: u64 = 16384;
 
 /// Check the validity of a GPT Header
 ///
@@ -178,7 +179,7 @@ impl GptHeader {
     ///
     /// All of which MUST be properly calculated before this is written out.
     pub(crate) fn new() -> Self {
-        let mut header = Self {
+        Self {
             signature: EFI_PART,
             revision: 0x0001_0000,
             header_size: 92,
@@ -193,9 +194,7 @@ impl GptHeader {
             partitions: Default::default(),
             partition_size: 128,
             partitions_crc32: Default::default(),
-        };
-        header.header_crc32 = calculate_crc(&header);
-        header
+    }
     }
 
     /// Read the GPT Header from a `Read`er.
@@ -343,25 +342,28 @@ pub struct Gpt {
 
 impl Gpt {
     pub fn new(block_size: u64, disk_size: u64) -> Self {
-        let last_lba = disk_size / block_size;
+        // logical block addresses start at zero.
+        let last_lba = (disk_size / block_size) - 1;
+        let min_partition_blocks = MIN_PARTITIONS_BYTES / block_size;
         //
         let mbr = ProtectiveMbr::new(last_lba);
         //
         let mut header = GptHeader::new();
         header.this_lba = 1;
         header.alt_lba = last_lba;
-        // TODO: Properly calculate from block_size?
-        header.first_usable_lba = 36;
-        header.last_usable_lba = last_lba - 35;
+        // Plus two blocks, one for the MBR and one for the GPT Header.
+        header.first_usable_lba = min_partition_blocks + 2;
+        // Minus 1 block for the GPT Header
+        header.last_usable_lba = min_partition_blocks - 1;
         header.partition_array_start = 2;
+        header.header_crc32 = calculate_crc(&header);
         //
-        let mut backup = GptHeader::new();
+        let mut backup: GptHeader = header.clone();
         backup.this_lba = last_lba;
         backup.alt_lba = 1;
-        // TODO: Properly calculate from block_size?
-        backup.first_usable_lba = 36;
-        backup.last_usable_lba = last_lba - 35;
-        backup.partition_array_start = backup.last_usable_lba;
+        // usable addresses are inclusive
+        backup.partition_array_start = backup.last_usable_lba + 1;
+        backup.header_crc32 = calculate_crc(&backup);
         //
         let header = Some(header);
         let backup = Some(backup);
