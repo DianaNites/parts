@@ -78,7 +78,7 @@ fn check_validity<RS: Read + Seek>(
 ) -> Result<(), InnerError> {
     ensure!(header.signature == EFI_PART, Signature);
     let old_crc = std::mem::replace(&mut header.header_crc32, 0);
-    let crc = calculate_crc(header)?;
+    let crc = calculate_crc(header);
     header.header_crc32 = old_crc;
     ensure!(crc == old_crc, HeaderChecksumMismatch);
     //
@@ -104,17 +104,22 @@ fn check_validity<RS: Read + Seek>(
 /// ## Errors
 ///
 /// - If bincode does.
-fn calculate_crc(header: &GptHeader) -> Result<u32, InnerError> {
-    // Relies on serialization being correct.
-    // TODO: Use `repr(C)` for `GptHeader` and just look at memory?
-    let source_bytes = bincode::serialize(&header).context(Parse)?;
-    Ok(crc32::checksum_ieee(
+fn calculate_crc(header: &GptHeader) -> u32 {
+    let source_bytes = unsafe {
+        std::slice::from_raw_parts(
+            (header as *const _) as *const u8,
+            std::mem::size_of::<GptHeader>(),
+        )
+    };
+    crc32::checksum_ieee(
+        // `GptHeader` has extra padding at the end, but it doesn't matter.
         &source_bytes[..header.header_size as usize],
-    ))
+    )
 }
 
 /// The GPT Header Structure
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[repr(C)]
 struct GptHeader {
     /// Hard-coded to "EFI PART",
     /// or the 64-bit constant 0x5452415020494645
@@ -189,7 +194,7 @@ impl GptHeader {
             partition_size: 128,
             partitions_crc32: Default::default(),
         };
-        header.header_crc32 = calculate_crc(&header).unwrap();
+        header.header_crc32 = calculate_crc(&header);
         header
     }
 
@@ -211,6 +216,7 @@ impl GptHeader {
 
 /// A GPT Partition
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[repr(C)]
 pub struct GptPart {
     /// Defines the type of this partition
     partition_type_guid: u128,
@@ -305,7 +311,12 @@ impl GptPartBuilder {
             // FIXME: Is this correct?
             ending_lba: (self.size / self.block_size) - 1,
             attributes: 0,
-            name: self.name.encode_utf16().collect(),
+            name: self
+                .name
+                .encode_utf16()
+                .chain([0].iter().copied().cycle())
+                .take(36)
+                .collect(),
         }
     }
 }
@@ -522,16 +533,30 @@ impl Gpt {
         self.partitions.push(part);
         let header = self.header.as_mut().unwrap();
         header.partitions += 1;
-        header.header_crc32 = calculate_crc(&header).unwrap();
         //
-        // FIXME: Not currently possible to calculate partitions crc
-        // TODO: Use repr(C) for all structs and then just compare in memory?
+        let source_bytes = unsafe {
+            std::slice::from_raw_parts(
+                self.partitions.as_ptr() as *const u8,
+                std::mem::size_of::<GptPart>() * self.partitions.len(),
+            )
+        };
+        header.partitions_crc32 = crc32::checksum_ieee(&source_bytes);
+        //
+        header.header_crc32 = calculate_crc(&header);
+        //
+        let mut backup = header.clone();
+        backup.this_lba = self.disk_size / self.block_size;
+        backup.alt_lba = 1;
+        backup.partition_array_start = backup.this_lba - 1;
+        //
+        backup.header_crc32 = calculate_crc(&backup);
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Gpt, GptPartBuilder};
+    use super::{Gpt, GptPart, GptPartBuilder};
+    use static_assertions::*;
     use std::{
         error::Error,
         io::{prelude::*, Cursor},
@@ -591,7 +616,7 @@ mod tests {
     /// See tests/data/README.md for details on how the original was created.
     #[test]
     fn create_test_parts() -> Result {
-        let mut data = Cursor::new(vec![0; 10 * 1024usize.pow(2)]);
+        let mut data = Cursor::new(vec![0; TEN_MIB_BYTES]);
         //
         let mut gpt = Gpt::new(BLOCK_SIZE, data.get_ref().len() as u64);
         let part = GptPartBuilder::new(BLOCK_SIZE)
@@ -607,11 +632,17 @@ mod tests {
         file.read_to_end(&mut src_buf)?;
         //
         let data = data.get_mut();
-        assert_eq!(data.len(), TEN_MIB_BYTES);
+        assert_eq!(data.len(), TEN_MIB_BYTES,);
         assert_eq!(data.len(), src_buf.len());
         // FIXME: Fails, for obvious reasons.
         // Those reasons being we don't calculate any of the required data yet.
         // assert_eq!(*data, src_buf);
         Ok(())
+    }
+
+    /// Test that struct sizes are what we expect
+    #[test]
+    fn size() {
+        assert_eq_size!(GptPart, [u8; 128]);
     }
 }
