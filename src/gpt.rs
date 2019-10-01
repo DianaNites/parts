@@ -178,7 +178,7 @@ impl GptHeader {
     /// - `partition_array_start`
     ///
     /// All of which MUST be properly calculated before this is written out.
-    pub(crate) fn new() -> Self {
+    fn new() -> Self {
         Self {
             signature: EFI_PART,
             revision: 0x0001_0000,
@@ -200,11 +200,11 @@ impl GptHeader {
     /// Read the GPT Header from a `Read`er.
     ///
     /// The `Read`ers current position is undefined after this call.
-    pub(crate) fn from_reader<R: Read>(mut source: R) -> Result<Self> {
+    fn from_reader<R: Read>(mut source: R) -> Result<Self> {
         Ok(bincode::deserialize_from(&mut source).context(Parse)?)
     }
 
-    pub(crate) fn to_writer<W: Write>(&self, mut dest: W, block_size: u64) -> Result<()> {
+    fn to_writer<W: Write>(&self, mut dest: W, block_size: u64) -> Result<()> {
         bincode::serialize_into(&mut dest, self).context(Parse)?;
         // Account for reserved space.
         let len = (block_size - 92) as usize;
@@ -243,7 +243,7 @@ impl GptPart {
     /// This will advance the reader by the size of a single partition entry.
     ///
     /// `size_of` is `GptHeader::partition_size`
-    pub(crate) fn from_reader<R: Read + Seek>(mut source: R, size_of: u32) -> Result<Self> {
+    fn from_reader<R: Read + Seek>(mut source: R, size_of: u32) -> Result<Self> {
         let obj = bincode::deserialize_from(&mut source).context(Parse)?;
         // Seek past the remaining block.
         source
@@ -252,7 +252,7 @@ impl GptPart {
         Ok(obj)
     }
 
-    pub(crate) fn to_writer<W: Write>(&self, mut dest: W, size_of: u32) -> Result<()> {
+    fn to_writer<W: Write>(&self, mut dest: W, size_of: u32) -> Result<()> {
         bincode::serialize_into(&mut dest, self).context(Parse)?;
         // Account for reserved space.
         let len = (size_of - 128) as usize;
