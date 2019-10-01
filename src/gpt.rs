@@ -118,6 +118,26 @@ fn calculate_crc(header: &GptHeader) -> u32 {
     )
 }
 
+/// Changes the first 3 fields in a Uuid to little endian,
+/// since GPT stores them weirdly.
+///
+/// This is an ugly hack.
+// FIXME: An ugly hack for Uuid
+// TODO: Just use a [u8; 16]?
+fn uuid_hack(uuid: Uuid) -> Uuid {
+    let (mut a, mut b, mut c, d) = uuid.as_fields();
+    // `Uuid` gives them to us as big-endian, which Rust will interpret as little,
+    // but they need to be little.
+    //
+    // use `swap_bytes` so that swapping doesn't depend on host endianness.
+    //
+    // `Uuid` will swap them again, so the final order is little.
+    a = a.swap_bytes();
+    b = b.swap_bytes();
+    c = c.swap_bytes();
+    Uuid::from_fields(a, b, c, d).unwrap()
+}
+
 /// The GPT Header Structure
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[repr(C)]
@@ -214,14 +234,16 @@ impl GptHeader {
 }
 
 /// A GPT Partition
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[repr(C)]
 pub struct GptPart {
     /// Defines the type of this partition
-    partition_type_guid: u128,
+    #[serde(with = "uuid::adapter::compact")]
+    partition_type_guid: Uuid,
 
     /// Unique identifer for this partition
-    partition_guid: u128,
+    #[serde(with = "uuid::adapter::compact")]
+    partition_guid: Uuid,
 
     /// Where it starts on disk
     starting_lba: u64,
@@ -259,8 +281,22 @@ impl GptPart {
         dest.write_all(&vec![0; len]).context(Io)?;
         Ok(())
     }
+
+    /// Used by tests.
+    #[allow(dead_code)]
+    fn empty() -> Self {
+        GptPart {
+            partition_type_guid: Default::default(),
+            partition_guid: Default::default(),
+            starting_lba: Default::default(),
+            ending_lba: Default::default(),
+            attributes: Default::default(),
+            name: Default::default(),
+        }
+    }
 }
 
+/// Builder struct for Gpt Partitions.
 #[derive(Debug, PartialEq)]
 pub struct GptPartBuilder {
     partition_type_guid: Uuid,
@@ -277,6 +313,7 @@ pub struct GptPartBuilder {
 }
 
 impl GptPartBuilder {
+    /// Create a new Gpt Partition.
     pub fn new(block_size: u64) -> Self {
         Self {
             partition_type_guid: Uuid::nil(),
@@ -296,19 +333,68 @@ impl GptPartBuilder {
     }
 
     /// Size of the partition, in bytes.
-    pub fn size(mut self, size_in_bytes: u64) -> Self {
+    ///
+    /// ## Note
+    ///
+    /// Partitions can only be represented in logical block addresses,
+    /// so this size should be divisible by the device block size.
+    ///
+    /// If it's not, the size will be rounded up.
+    pub fn size(mut self, mut size_in_bytes: u64) -> Self {
+        if size_in_bytes % self.block_size != 0 {
+            size_in_bytes += self.block_size - (size_in_bytes % self.block_size)
+        }
         self.size = size_in_bytes;
         self
     }
 
+    /// Which Logical Block Address the partition should at start on disk.
+    ///
+    /// The ending LBA will be automatically calculated from
+    /// the size of the partition and the its start.
+    ///
+    /// ## Examples
+    ///
+    /// Align at a 1MiB boundary
+    ///
+    /// ```rust
+    /// # use parts::*;
+    ///
+    /// let block_size = 512;
+    /// let part = GptPartBuilder::new(block_size).start(1024u64.pow(2) / block_size);
+    /// ```
+    pub fn start(mut self, lba: u64) -> Self {
+        self.start_lba = lba;
+        self
+    }
+
+    /// Set the partition GUID.
+    ///
+    /// ## Safety
+    ///
+    /// This is unsafe because GPT Partition GUID's are supposed to be unique.
+    ///
+    /// Having two partitions with the same GUID is a violation of the spec.
+    pub unsafe fn part_guid(mut self, part_guid: Uuid) -> Self {
+        self.partition_guid = uuid_hack(part_guid);
+        self
+    }
+
+    /// Partition type GUID.
+    // TODO: Known partition type constants.
+    pub fn part_type(mut self, part_type: Uuid) -> Self {
+        self.partition_type_guid = uuid_hack(part_type);
+        self
+    }
+
+    /// Finalize the Gpt Partition.
     pub fn finish(self) -> GptPart {
         GptPart {
-            partition_type_guid: u128::from_le_bytes(*self.partition_type_guid.as_bytes()),
-            partition_guid: u128::from_le_bytes(*self.partition_guid.as_bytes()),
-            // FIXME: Partition starts
+            partition_type_guid: self.partition_type_guid,
+            partition_guid: self.partition_guid,
             starting_lba: self.start_lba,
-            // FIXME: Is this correct?
-            ending_lba: (self.size / self.block_size) - 1,
+            // inclusive on both ends.
+            ending_lba: (self.start_lba + (self.size / self.block_size)) - 1,
             attributes: 0,
             name: self
                 .name
@@ -354,7 +440,7 @@ impl Gpt {
         // Plus two blocks, one for the MBR and one for the GPT Header.
         header.first_usable_lba = min_partition_blocks + 2;
         // Minus 1 block for the GPT Header
-        header.last_usable_lba = min_partition_blocks - 1;
+        header.last_usable_lba = last_lba - min_partition_blocks - 1;
         header.partition_array_start = 2;
         header.header_crc32 = calculate_crc(&header);
         //
@@ -363,6 +449,7 @@ impl Gpt {
         backup.alt_lba = 1;
         // usable addresses are inclusive
         backup.partition_array_start = backup.last_usable_lba + 1;
+        backup.header_crc32 = 0;
         backup.header_crc32 = calculate_crc(&backup);
         //
         let header = Some(header);
@@ -376,6 +463,21 @@ impl Gpt {
             block_size,
             disk_size,
         }
+    }
+
+    /// Set the disk GUID.
+    ///
+    /// ## Safety
+    ///
+    /// This is unsafe because GPT Disk GUID's are supposed to be unique.
+    ///
+    /// Having two disks with the same GUID is a violation of the spec.
+    pub unsafe fn set_disk_guid(&mut self, new_guid: Uuid) {
+        let new_guid = uuid_hack(new_guid);
+        //
+        self.header.as_mut().unwrap().disk_guid = new_guid;
+        self.backup.as_mut().unwrap().disk_guid = new_guid;
+        self.recalculate_crc();
     }
 
     /// Read from an existing GPT Disk or image.
@@ -431,7 +533,7 @@ impl Gpt {
                 let part = GptPart::from_reader(&mut source, header.partition_size)?;
                 // Ignore unused partitions, so `partitions` isn't cluttered.
                 // Shouldn't cause any problems since unused partitions are all zeros.
-                if part.partition_type_guid != 0 {
+                if part.partition_type_guid != Uuid::nil() {
                     partitions.push(part);
                 }
             }
@@ -462,7 +564,7 @@ impl Gpt {
                     let part = GptPart::from_reader(&mut source, backup.partition_size)?;
                     // Ignore unused partitions, so `partitions` isn't cluttered.
                     // Shouldn't cause any problems since unused partitions are all zeros.
-                    if part.partition_type_guid != 0 {
+                    if part.partition_type_guid != Uuid::nil() {
                         partitions.push(part);
                     }
                 }
@@ -533,43 +635,74 @@ impl Gpt {
     /// Adds a new partition
     pub fn add_partition(&mut self, part: GptPart) {
         self.partitions.push(part);
-        let header = self.header.as_mut().unwrap();
-        header.partitions += 1;
         //
+        let header = self.header.as_mut().unwrap();
+        let backup = self.backup.as_mut().unwrap();
+        header.partitions += 1;
+        backup.partitions += 1;
+        // FIXME: Support more partitions.
+        // This would require moving the first usable lba forward, and the last usable one back.
+        assert!(header.partitions <= 128, "Too many partitions");
+        //
+        self.recalculate_part_crc();
+    }
+
+    /// Recalculate the primary and backup header crc
+    fn recalculate_crc(&mut self) {
+        let header = self.header.as_mut().unwrap();
+        let backup = self.backup.as_mut().unwrap();
+        //
+        header.header_crc32 = 0;
+        header.header_crc32 = calculate_crc(&header);
+        //
+        backup.header_crc32 = 0;
+        backup.header_crc32 = calculate_crc(&backup);
+    }
+
+    /// Recalculate the primary and backup partition crc.
+    ///
+    /// This also calls `recalculate_crc`, since updating the partition crc
+    /// means the header one must be updated too.
+    fn recalculate_part_crc(&mut self) {
         let source_bytes = unsafe {
             std::slice::from_raw_parts(
                 self.partitions.as_ptr() as *const u8,
                 std::mem::size_of::<GptPart>() * self.partitions.len(),
             )
         };
-        header.partitions_crc32 = crc32::checksum_ieee(&source_bytes);
+        let crc = crc32::checksum_ieee(&source_bytes);
         //
-        header.header_crc32 = calculate_crc(&header);
+        let header = self.header.as_mut().unwrap();
+        let backup = self.backup.as_mut().unwrap();
         //
-        let mut backup: GptHeader = header.clone();
-        backup.this_lba = self.disk_size / self.block_size;
-        backup.alt_lba = 1;
-        backup.partition_array_start = backup.this_lba - 1;
+        header.partitions_crc32 = crc;
+        backup.partitions_crc32 = crc;
         //
-        backup.header_crc32 = calculate_crc(&backup);
+        self.recalculate_crc();
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{Gpt, GptPart, GptPartBuilder};
+    use prettydiff::basic::DiffOp;
     use prettydiff::diff_slice;
     use static_assertions::*;
     use std::{
         error::Error,
         io::{prelude::*, Cursor},
     };
+    use uuid::Uuid;
 
     static TEST_PARTS: &str = "tests/data/test_parts";
     static TEST_PARTS_CF: &str = "tests/data/test_parts_cf";
     const BLOCK_SIZE: u64 = 512;
     // 10 * 1024^2
     const TEN_MIB_BYTES: usize = 10485760;
+
+    const CF_DISK_GUID: &str = "A17875FB-1D86-EE4D-8DFE-E3E8ABBCD364";
+    const CF_PART_GUID: &str = "97954376-2BB6-534B-A015-DF434A94ABA2";
+    const LINUX_PART_GUID: &str = "0FC63DAF-8483-4772-8E79-3D69D8477DE4";
 
     type Result = std::result::Result<(), Box<dyn Error>>;
 
@@ -614,8 +747,8 @@ mod tests {
         Ok(())
     }
 
-    /// Test that we can create a partition identical to the one i
-    /// `test_parts`.
+    /// Test that we can create a partition identical to the one in
+    /// `test_parts_cf`.
     ///
     /// See tests/data/README.md for details on how the original was created.
     ///
@@ -633,11 +766,30 @@ mod tests {
         let mut data = Cursor::new(vec![0; TEN_MIB_BYTES]);
         //
         let mut gpt = Gpt::new(BLOCK_SIZE, data.get_ref().len() as u64);
-        let part = GptPartBuilder::new(BLOCK_SIZE)
-            .name("Test")
+        let mut part = GptPartBuilder::new(BLOCK_SIZE)
             .size(8 * 1024u64.pow(2))
-            .finish();
+            .start(1024u64.pow(2) / BLOCK_SIZE)
+            .part_type(Uuid::parse_str(LINUX_PART_GUID)?);
+        unsafe {
+            part = part.part_guid(Uuid::parse_str(CF_PART_GUID)?);
+        }
+        let part = part.finish();
+        //
         gpt.add_partition(part);
+        unsafe {
+            gpt.set_disk_guid(Uuid::parse_str(CF_DISK_GUID)?);
+        };
+        // NOTE: Cfdisk sets the first usable LBA to 2048
+        // cfdisk also sets `partitions` to 128 all the time.
+        // Ugly hack.
+        gpt.header.as_mut().unwrap().first_usable_lba = 2048;
+        gpt.backup.as_mut().unwrap().first_usable_lba = 2048;
+        //
+        gpt.header.as_mut().unwrap().partitions = 128;
+        gpt.backup.as_mut().unwrap().partitions = 128;
+        gpt.partitions.resize(128, GptPart::empty());
+        //
+        gpt.recalculate_part_crc();
         //
         gpt.to_writer(&mut data)?;
         //
@@ -646,14 +798,34 @@ mod tests {
         file.read_to_end(&mut src_buf)?;
         //
         let data = data.get_mut();
-        assert_eq!(src_buf.len(), TEN_MIB_BYTES);
+        assert_eq!(src_buf.len(), TEN_MIB_BYTES, "File too small");
         assert_eq!(data.len(), TEN_MIB_BYTES, "Too much being written");
-        // FIXME: Fails, for obvious reasons.
-        // Those reasons being we don't calculate any of the required data yet.
-        // assert_eq!(*data, src_buf);
-        println!("Diff: {}", diff_slice(&data[..512], &src_buf[..512]));
+
+        let block_size = BLOCK_SIZE as usize;
+        let partition_entry_size = 128;
+        // Just directly comparing the slices would generate FAR too much output.
+        // This also highlights where the problem is, byte by byte, making debugging easier.
+        let mbr_diff = diff_slice(&data[..block_size], &src_buf[..block_size]);
+        let gpt_diff = diff_slice(
+            &data[block_size..block_size * 2],
+            &src_buf[block_size..block_size * 2],
+        );
+        let part_diff = diff_slice(
+            &data[block_size * 2..(block_size * 2) + partition_entry_size],
+            &src_buf[block_size * 2..(block_size * 2) + partition_entry_size],
+        );
+        eprintln!("MBR Diff: {}", mbr_diff);
+        eprintln!("GPT Diff: {}", gpt_diff);
+        eprintln!("Partition Diff: {}", part_diff);
         //
-        unimplemented!()
+        assert_eq!(mbr_diff.diff.len(), 1, "MBR Diff has changes");
+        assert_eq!(gpt_diff.diff.len(), 1, "GPT Diff has changes");
+        assert_eq!(part_diff.diff.len(), 1, "Partition Diff has changes");
+        match (&mbr_diff.diff[0], &gpt_diff.diff[0], &part_diff.diff[0]) {
+            (DiffOp::Equal(_), DiffOp::Equal(_), DiffOp::Equal(_)) => (),
+            (_, _, _) => panic!("Diffs are wrong"),
+        }
+        Ok(())
     }
 
     /// Test that struct sizes are what we expect
