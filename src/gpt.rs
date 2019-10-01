@@ -194,7 +194,7 @@ impl GptHeader {
             partitions: Default::default(),
             partition_size: 128,
             partitions_crc32: Default::default(),
-    }
+        }
     }
 
     /// Read the GPT Header from a `Read`er.
@@ -558,6 +558,7 @@ impl Gpt {
 #[cfg(test)]
 mod tests {
     use super::{Gpt, GptPart, GptPartBuilder};
+    use prettydiff::diff_slice;
     use static_assertions::*;
     use std::{
         error::Error,
@@ -616,6 +617,16 @@ mod tests {
     /// `test_parts`.
     ///
     /// See tests/data/README.md for details on how the original was created.
+    ///
+    /// # Note
+    ///
+    /// GNU Parted has a ton of bugs, so this test isn't actually possible.
+    ///
+    /// In particular
+    ///
+    /// - Parted writes 0x000100 instead of 0x000200 for the starting CHS
+    /// - Parted writes 0xFFFFFE instead of 0xFFFFFF for the ending CHS
+    /// - Probably more.
     #[test]
     fn create_test_parts() -> Result {
         let mut data = Cursor::new(vec![0; TEN_MIB_BYTES]);
@@ -634,12 +645,14 @@ mod tests {
         file.read_to_end(&mut src_buf)?;
         //
         let data = data.get_mut();
-        assert_eq!(data.len(), TEN_MIB_BYTES,);
-        assert_eq!(data.len(), src_buf.len());
+        assert_eq!(src_buf.len(), TEN_MIB_BYTES);
+        assert_eq!(data.len(), TEN_MIB_BYTES, "Too much being written");
         // FIXME: Fails, for obvious reasons.
         // Those reasons being we don't calculate any of the required data yet.
         // assert_eq!(*data, src_buf);
-        Ok(())
+        println!("Diff: {}", diff_slice(&data[..512], &src_buf[..512]));
+        //
+        unimplemented!()
     }
 
     /// Test that struct sizes are what we expect

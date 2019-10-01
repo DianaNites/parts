@@ -62,6 +62,7 @@ impl ProtectiveMbr {
                     start_track: 0x00,
                     //
                     os_type: 0xEE,
+                    // Technically incorrect, but
                     // Existing implementations seem to do the same thing here.
                     end_head: 0xFF,
                     end_sector: 0xFF,
@@ -134,6 +135,8 @@ impl ProtectiveMbr {
                 signature: self.signature
             }
         );
+        // TODO: Validate starting CHS
+        // NOTE: parted writes an invalid MBR with an invalid CHS.
         for part in &self.partitions[1..] {
             ensure!(*part == MbrPart::default(), Validation);
         }
