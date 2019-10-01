@@ -684,7 +684,7 @@ impl Gpt {
 
 #[cfg(test)]
 mod tests {
-    use super::{Gpt, GptPart, GptPartBuilder};
+    use super::{Gpt, GptHeader, GptPart, GptPartBuilder};
     use prettydiff::basic::DiffOp;
     use prettydiff::diff_slice;
     use static_assertions::*;
@@ -832,5 +832,8 @@ mod tests {
     #[test]
     fn size() {
         assert_eq_size!(GptPart, [u8; 128]);
+        // Strictly speaking it should be 92, but should be fine
+        // since we only depend on the first 92 bytes, and the rest is padding.
+        assert_eq_size!(GptHeader, [u8; 96]);
     }
 }
