@@ -1,6 +1,7 @@
 //! Gpt Definitions
-use crate::{mbr::*, util::*};
+use crate::mbr::*;
 use crc::crc32;
+use generic_array::{typenum::U36, GenericArray};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt, ResultExt, Snafu};
 use std::io::{prelude::*, SeekFrom};
@@ -227,10 +228,8 @@ pub struct GptPart {
     // TODO: Bitflags
     attributes: u64,
 
-    /// Null-terminated name, UCS-2 string,
-    /// max length of 36 including null.
-    #[serde(with = "partition_name")]
-    name: String,
+    /// Null-terminated name, UCS-2/UTF-16LE string,
+    name: GenericArray<u16, U36>,
 }
 
 impl GptPart {
@@ -306,7 +305,7 @@ impl GptPartBuilder {
             // FIXME: Is this correct?
             ending_lba: (self.size / self.block_size) - 1,
             attributes: 0,
-            name: self.name,
+            name: self.name.encode_utf16().collect(),
         }
     }
 }
