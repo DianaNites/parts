@@ -79,7 +79,7 @@ impl ProtectiveMbr {
                 MbrPart::default(),
                 MbrPart::default(),
             ],
-            signature: [0u8; 2],
+            signature: [0x55, 0xAA],
         }
     }
 
