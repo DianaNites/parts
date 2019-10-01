@@ -566,6 +566,7 @@ mod tests {
     };
 
     static TEST_PARTS: &str = "tests/data/test_parts";
+    static TEST_PARTS_CF: &str = "tests/data/test_parts_cf";
     const BLOCK_SIZE: u64 = 512;
     // 10 * 1024^2
     const TEN_MIB_BYTES: usize = 10485760;
@@ -640,7 +641,7 @@ mod tests {
         //
         gpt.to_writer(&mut data)?;
         //
-        let mut file = std::fs::File::open(TEST_PARTS)?;
+        let mut file = std::fs::File::open(TEST_PARTS_CF)?;
         let mut src_buf = Vec::with_capacity(TEN_MIB_BYTES);
         file.read_to_end(&mut src_buf)?;
         //
