@@ -546,7 +546,7 @@ impl Gpt {
         //
         header.header_crc32 = calculate_crc(&header);
         //
-        let mut backup = header.clone();
+        let mut backup: GptHeader = header.clone();
         backup.this_lba = self.disk_size / self.block_size;
         backup.alt_lba = 1;
         backup.partition_array_start = backup.this_lba - 1;
