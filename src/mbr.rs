@@ -46,9 +46,9 @@ impl ProtectiveMbr {
     ///
     /// ## Arguments
     ///
-    /// - `last_lba`, the last logical block address on the device.
+    /// - `last_lba`, the last usable logical block address on the device.
     pub(crate) fn new(last_lba: u64) -> Self {
-        let last_lba = last_lba - 1;
+        let last_lba = last_lba;
         Self {
             boot_code: GenericArray::default(),
             unique_signature: [0u8; 4],
