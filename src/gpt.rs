@@ -825,8 +825,6 @@ mod tests {
 
     type Result = std::result::Result<(), Box<dyn Error>>;
 
-    // TODO: Refactor common code
-
     /// Tests that we can read an external GPT layout,
     /// serialize it, and deserialize it again, with it staying the same.
     #[test]
