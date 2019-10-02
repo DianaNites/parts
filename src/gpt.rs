@@ -7,6 +7,7 @@ use snafu::{ensure, OptionExt, ResultExt, Snafu};
 use std::io::{prelude::*, SeekFrom};
 use uuid::Uuid;
 
+/// Gpt Error type.
 #[derive(Debug, Snafu)]
 pub struct GptError(InnerError);
 
@@ -414,6 +415,13 @@ impl GptPartBuilder {
 }
 
 /// A GPT Disk
+///
+/// # Panics
+///
+/// It is possible to create an invalid `Gpt` instance,
+/// for the purposes of repairing it.
+///
+/// Using such an instance without repairing it may cause certain methods to panic.
 #[derive(Debug, PartialEq)]
 pub struct Gpt {
     mbr: ProtectiveMbr,
@@ -434,6 +442,27 @@ pub struct Gpt {
 }
 
 impl Gpt {
+    /// Create a new GPT label,
+    /// assuming a size of `disk_size` and a block size of `block_size`
+    ///
+    /// This creates a valid, but empty, Gpt Label.
+    ///
+    /// ## Examples
+    ///
+    /// Create a new Gpt Table and add a partition.
+    ///
+    /// ```rust
+    /// # use parts::{Gpt, GptPartBuilder};
+    /// # let block_size = 512;
+    /// # let disk_size = 512 * 70;
+    /// let mut gpt = Gpt::new(block_size, disk_size);
+    /// let part = GptPartBuilder::new(block_size)
+    ///     .name("Example")
+    ///     .size(block_size * 2)
+    ///     .start(34)
+    ///     .finish();
+    /// gpt.add_partition(part);
+    /// ```
     pub fn new(block_size: u64, disk_size: u64) -> Self {
         // logical block addresses start at zero.
         let last_lba = (disk_size / block_size) - 1;
@@ -489,15 +518,30 @@ impl Gpt {
 
     /// Read from an existing GPT Disk or image.
     ///
+    /// Note that it is statically impossible for this to modify the underlying device.
+    ///
     /// ## Arguments
     ///
     /// - `block_size` is the devices logical block size. ex: 512, 4096
+    ///
+    /// ## Examples
+    ///
+    /// Read from an in-memory representation.
+    ///
+    /// ```rust
+    /// # use std::io::Cursor;
+    /// # use parts::Gpt;
+    /// # const TEN_MIB_BYTES: usize = 10485760;
+    /// # const BLOCK_SIZE: u64 = 512;
+    /// let mut data = Cursor::new(vec![0; TEN_MIB_BYTES]);
+    /// let gpt = Gpt::from_reader(&mut data, BLOCK_SIZE);
+    /// ```
     ///
     /// ## Errors
     ///
     /// - If IO fails.
     /// - If the Protective MBR is invalid.
-    /// - If the primary or backup GPT is invalid.
+    /// - If the primary and/or backup GPT is invalid.
     ///
     /// ### Invalid GPT Headers
     ///
@@ -595,6 +639,17 @@ impl Gpt {
         }
     }
 
+    /// Read a GPT Label from an existing file
+    ///
+    /// On Linux this will use the `BLKSSZGET` `ioctl` to get the logical
+    /// block size, and `BLKGETSIZE64` to get the byte size.
+    ///
+    /// ## Panics
+    ///
+    /// - If the file is not a block device.
+    /// - If the `ioctl` fail.
+    /// - For any reason `Gpt::from_reader` would panic.
+    #[doc(hidden)]
     pub fn from_file() -> Self {
         unimplemented!()
     }

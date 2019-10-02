@@ -1,4 +1,5 @@
 //! parts
+#![deny(missing_docs)]
 
 mod gpt;
 mod mbr;
