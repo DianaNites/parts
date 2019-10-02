@@ -815,6 +815,7 @@ mod tests {
     static TEST_PARTS: &str = "tests/data/test_parts";
     static TEST_PARTS_CF: &str = "tests/data/test_parts_cf";
     const BLOCK_SIZE: u64 = 512;
+    const LARGE_BLOCK_SIZE: u64 = 4096;
     // 10 * 1024^2
     const TEN_MIB_BYTES: usize = 10485760;
 
@@ -825,7 +826,6 @@ mod tests {
     type Result = std::result::Result<(), Box<dyn Error>>;
 
     // TODO: Refactor common code
-    // TODO: Tests on exotic block sizes
 
     /// Tests that we can read an external GPT layout,
     /// serialize it, and deserialize it again, with it staying the same.
@@ -972,6 +972,19 @@ mod tests {
         gpt.to_writer(&mut v)?;
         let gpt = Gpt::from_reader(&mut v, BLOCK_SIZE).unwrap_err();
         dbg!(&gpt);
+        Ok(())
+    }
+
+    /// Test large block sizes
+    #[test]
+    fn large_block_size() -> Result {
+        let disk_size = LARGE_BLOCK_SIZE * 100;
+        let gpt = Gpt::new(LARGE_BLOCK_SIZE, disk_size);
+        dbg!(&gpt);
+        let header = gpt.header.as_ref().unwrap();
+        let backup = gpt.backup.as_ref().unwrap();
+        assert!(header.first_usable_lba >= 6);
+        assert!(backup.first_usable_lba >= 6);
         Ok(())
     }
 }
