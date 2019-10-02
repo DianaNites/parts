@@ -106,9 +106,9 @@ fn check_validity<RS: Read + Seek>(
     Ok(())
 }
 
-/// Calculate the Header CRC for a `GptHeader`.
+/// Calculate the Header CRC for a [`GptHeader`].
 ///
-/// `GptHeader::header_crc` MUST be zero for this to be correct.
+/// [`GptHeader::header_crc`] MUST be zero for this to be correct.
 ///
 /// ## Errors
 ///
@@ -199,11 +199,11 @@ struct GptHeader {
 impl GptHeader {
     /// Creates a new GPT Header, valid EXCEPT for
     ///
-    /// - `this_lba`
-    /// - `alt_lba`
-    /// - `first_usable_lba`
-    /// - `last_usable_lba`
-    /// - `partition_array_start`
+    /// - [`GptHeader::this_lba`]
+    /// - [`GptHeader::alt_lba`]
+    /// - [`GptHeader::first_usable_lba`]
+    /// - [`GptHeader::last_usable_lba`]
+    /// - [`GptHeader::partition_array_start`]
     ///
     /// All of which MUST be properly calculated before this is written out.
     fn new() -> Self {
@@ -225,13 +225,14 @@ impl GptHeader {
         }
     }
 
-    /// Read the GPT Header from a `Read`er.
+    /// Read the GPT Header from a [`Read`]er.
     ///
-    /// The `Read`ers current position is undefined after this call.
+    /// The [`Read`]ers current position is undefined after this call.
     fn from_reader<R: Read>(mut source: R) -> Result<Self> {
         Ok(bincode::deserialize_from(&mut source).context(Parse)?)
     }
 
+    /// Write the GPT Header to a [`Write`]r.
     fn to_writer<W: Write>(&self, mut dest: W, block_size: u64) -> Result<()> {
         bincode::serialize_into(&mut dest, self).context(Parse)?;
         // Account for reserved space.
@@ -268,11 +269,11 @@ pub struct GptPart {
 }
 
 impl GptPart {
-    /// Reads a GPT Partition from a `Read`er.
+    /// Reads a GPT Partition from a [`Read`]er.
     ///
-    /// This will advance the reader by the size of a single partition entry.
+    /// This will advance the [`Read`]er by the size of a single partition entry.
     ///
-    /// `size_of` is `GptHeader::partition_size`
+    /// `size_of` is [`GptHeader::partition_size`]
     fn from_reader<R: Read + Seek>(mut source: R, size_of: u32) -> Result<Self> {
         let obj = bincode::deserialize_from(&mut source).context(Parse)?;
         // Seek past the remaining block.
@@ -282,6 +283,7 @@ impl GptPart {
         Ok(obj)
     }
 
+    /// Write a GPT Partition to a [`Write`]r
     fn to_writer<W: Write>(&self, mut dest: W, size_of: u32) -> Result<()> {
         bincode::serialize_into(&mut dest, self).context(Parse)?;
         // Account for reserved space.
@@ -434,7 +436,7 @@ impl GptPartBuilder {
 ///
 /// # Panics
 ///
-/// It is possible to create an invalid `Gpt` instance,
+/// It is possible to create an invalid [`Gpt`] instance,
 /// for the purposes of repairing it.
 ///
 /// Using such an instance without repairing it may cause certain methods to panic.
@@ -561,7 +563,7 @@ impl Gpt {
     ///
     /// ### Invalid GPT Headers
     ///
-    /// In this case the `Err` variant will contain a `Gpt` Instance,
+    /// In this case the [`Err`] variant will contain a [`Gpt`] Instance,
     /// which should be repaired after asking permission from the user.
     ///
     /// If both the primary and backup GPT is corrupt, repairing will not be possible.
@@ -664,13 +666,13 @@ impl Gpt {
     ///
     /// - If the file is not a block device.
     /// - If the `ioctl` fail.
-    /// - For any reason `Gpt::from_reader` would panic.
+    /// - For any reason [`Gpt::from_reader`] would panic.
     #[doc(hidden)]
     pub fn from_file() -> Self {
         unimplemented!()
     }
 
-    /// Write the GPT structure to a `Write`r.
+    /// Write the GPT structure to a [`Write`]r.
     ///
     /// # Example
     ///
@@ -734,7 +736,7 @@ impl Gpt {
     ///
     /// ## Panics
     ///
-    /// - If the `GptPart` doesn't fit
+    /// - If the [`GptPart`] doesn't fit
     /// within the first/last usable logical block addresses.
     pub fn add_partition(&mut self, part: GptPart) {
         let header = self.header.as_mut().unwrap();
@@ -777,7 +779,7 @@ impl Gpt {
 
     /// Recalculate the primary and backup partition crc.
     ///
-    /// This also calls `recalculate_crc`, since updating the partition crc
+    /// This also calls [`Gpt::recalculate_crc`], since updating the partition crc
     /// means the header one must be updated too.
     fn recalculate_part_crc(&mut self) {
         let source_bytes = unsafe {
