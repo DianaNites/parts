@@ -45,4 +45,4 @@ mod mbr;
 pub mod partitions;
 
 pub use gpt::*;
-pub use uuid::Uuid;
+pub use uuid;
