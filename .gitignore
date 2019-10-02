@@ -4,3 +4,4 @@ Cargo.lock
 main.rs
 hfuzz_*
 fuzz
+.cargo
