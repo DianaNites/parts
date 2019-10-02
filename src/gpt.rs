@@ -78,6 +78,13 @@ fn check_validity<RS: Read + Seek>(
     block_size: u64,
 ) -> Result<(), InnerError> {
     ensure!(header.signature == EFI_PART, Signature);
+    ensure!(header.header_size >= 92, InvalidGptHeader);
+    // FIXME: This one shouldn't be a requirement.
+    ensure!(
+        header.header_size <= std::mem::size_of::<GptHeader>() as u32,
+        InvalidGptHeader
+    );
+    ensure!(header.header_size <= block_size as u32, InvalidGptHeader);
     let old_crc = std::mem::replace(&mut header.header_crc32, 0);
     let crc = calculate_crc(header);
     header.header_crc32 = old_crc;
