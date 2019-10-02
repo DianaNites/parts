@@ -919,8 +919,7 @@ impl Gpt {
 #[cfg(test)]
 mod tests {
     use super::{Gpt, GptHeader, GptPart, GptPartBuilder};
-    use prettydiff::basic::DiffOp;
-    use prettydiff::diff_slice;
+    use prettydiff::{basic::DiffOp, diff_slice};
     use static_assertions::*;
     use std::{
         error::Error,
