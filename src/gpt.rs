@@ -714,9 +714,12 @@ impl Gpt {
         );
         //
         self.partitions.push(part);
-        //
-        header.partitions += 1;
-        backup.partitions += 1;
+        // `GptHeader::partitions` can be larger than the
+        // actual number of partitions, at least in practice.
+        if self.partitions.len() > header.partitions as usize {
+            header.partitions += 1;
+            backup.partitions += 1;
+        }
         // FIXME: Support more partitions.
         // This would require moving the first usable lba forward, and the last usable one back.
         assert!(header.partitions <= 128, "Too many partitions");
