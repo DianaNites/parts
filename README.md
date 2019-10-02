@@ -1,11 +1,13 @@
 # Parts, a GPT partition manager
 
-Read and create GPT tables/partitions in pure Rust.
+Read, create, and manipulate GPT tables/partitions in pure Rust.
 
 ## Usage
 
 NOTE: Please don't use this, it's new, WIP, and untested.
 Back up your data, or only use it on virtual disks.
+
+The code is well documented but unpolished, and the API is unstable.
 
 ## Features
 
