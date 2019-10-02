@@ -19,7 +19,7 @@ features = [
 ]
 
 [dev-dependencies]
-static_assertions = "0.3.4"
+static_assertions = "1.0.0"
 prettydiff = "0.3.1"
 
 [target.'cfg(fuzzing)'.dependencies]

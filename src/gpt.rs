@@ -921,6 +921,14 @@ mod tests {
 
     type Result = std::result::Result<(), Box<dyn Error>>;
 
+    // We rely on GptPart being exactly 128 bytes for crc calculation,
+    // directly from a `Vec<GptPart>`.
+    assert_eq_size!(GptPart, [u8; 128]);
+
+    // Strictly speaking it should be 92, but should be fine
+    // since we only depend on the first 92 bytes, and the rest is padding.
+    assert_eq_size!(GptHeader, [u8; 96]);
+
     /// Tests that we can read an external GPT layout,
     /// serialize it, and deserialize it again, with it staying the same.
     #[test]
@@ -1038,15 +1046,6 @@ mod tests {
             (_, _, _) => panic!("Diffs are wrong"),
         }
         Ok(())
-    }
-
-    /// Test that struct sizes are what we expect
-    #[test]
-    fn size() {
-        assert_eq_size!(GptPart, [u8; 128]);
-        // Strictly speaking it should be 92, but should be fine
-        // since we only depend on the first 92 bytes, and the rest is padding.
-        assert_eq_size!(GptHeader, [u8; 96]);
     }
 
     /// Test that we don't crash on header sizes
