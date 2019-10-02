@@ -22,7 +22,7 @@ pub(crate) enum MbrError {
 type Result<T, E = MbrError> = std::result::Result<T, E>;
 
 /// GPT Protective MBR
-#[derive(Serialize, Deserialize, PartialEq)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Hash, PartialOrd, Ord)]
 pub(crate) struct ProtectiveMbr {
     /// Bios boot code. Unused by GPT.
     boot_code: GenericArray<u8, U440>,
@@ -152,7 +152,7 @@ impl std::fmt::Debug for ProtectiveMbr {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq, Clone, Hash, PartialOrd, Ord)]
 struct MbrPart {
     /// Whether the partition is "bootable". Unused by GPT.
     /// Hard-coded to 0.

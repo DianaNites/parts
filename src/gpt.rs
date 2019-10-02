@@ -147,7 +147,7 @@ fn uuid_hack(uuid: Uuid) -> Uuid {
 }
 
 /// The GPT Header Structure
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Hash, PartialOrd, Ord)]
 #[repr(C)]
 struct GptHeader {
     /// Hard-coded to "EFI PART",
@@ -242,7 +242,7 @@ impl GptHeader {
 }
 
 /// A GPT Partition
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Hash, PartialOrd, Ord)]
 #[repr(C)]
 pub struct GptPart {
     /// Defines the type of this partition
@@ -422,7 +422,7 @@ impl GptPartBuilder {
 /// for the purposes of repairing it.
 ///
 /// Using such an instance without repairing it may cause certain methods to panic.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, Ord)]
 pub struct Gpt {
     mbr: ProtectiveMbr,
 
