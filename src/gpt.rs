@@ -108,7 +108,7 @@ fn check_validity<RS: Read + Seek>(
 
 /// Calculate the Header CRC for a [`GptHeader`].
 ///
-/// [`GptHeader::header_crc`] MUST be zero for this to be correct.
+/// [`GptHeader::header_crc32`] MUST be zero for this to be correct.
 ///
 /// ## Errors
 ///
