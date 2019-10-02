@@ -42,6 +42,7 @@
 
 mod gpt;
 mod mbr;
+#[doc(hidden)]
 pub mod partitions;
 
 pub use gpt::*;
