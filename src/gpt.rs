@@ -305,6 +305,10 @@ impl GptPart {
 }
 
 /// Builder struct for Gpt Partitions.
+///
+/// ## Example
+///
+/// See [parts](./index.html)
 #[derive(Debug, PartialEq)]
 pub struct GptPartBuilder {
     partition_type_guid: Uuid,
@@ -322,6 +326,10 @@ pub struct GptPartBuilder {
 
 impl GptPartBuilder {
     /// Create a new Gpt Partition.
+    ///
+    /// ## Example
+    ///
+    /// See [`GptPartBuilder`]
     pub fn new(block_size: u64) -> Self {
         Self {
             partition_type_guid: Uuid::nil(),
@@ -333,6 +341,8 @@ impl GptPartBuilder {
         }
     }
 
+    /// Set the name of the partition.
+    ///
     /// `name` must be no more than 35 characters.
     pub fn name(mut self, name: &str) -> Self {
         assert!(name.len() < 36, "Name too long");
@@ -369,7 +379,9 @@ impl GptPartBuilder {
     /// # use parts::*;
     ///
     /// let block_size = 512;
-    /// let part = GptPartBuilder::new(block_size).start(1024u64.pow(2) / block_size);
+    /// let part = GptPartBuilder::new(block_size)
+    ///     .start(1024u64.pow(2) / block_size)
+    ///     .finish();
     /// ```
     pub fn start(mut self, lba: u64) -> Self {
         self.start_lba = lba;
@@ -416,6 +428,10 @@ impl GptPartBuilder {
 
 /// A GPT Disk
 ///
+/// # Usage
+///
+/// See [`Gpt::new`] and [`Gpt::from_reader`]
+///
 /// # Panics
 ///
 /// It is possible to create an invalid `Gpt` instance,
@@ -437,7 +453,7 @@ pub struct Gpt {
     /// The devices block size. ex, 512, 4096
     block_size: u64,
 
-    /// Size of entire disk
+    /// Size of entire disk, in bytes.
     disk_size: u64,
 }
 
@@ -654,7 +670,23 @@ impl Gpt {
         unimplemented!()
     }
 
-    /// Write the GPT structure to a `Write`er.
+    /// Write the GPT structure to a `Write`r.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use parts::Gpt;
+    /// use std::io::Cursor;
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let block_size = 512;
+    /// # let disk_size = 512 * 70;
+    /// let gpt = Gpt::new(block_size, disk_size as u64);
+    /// let mut buffer = Cursor::new(vec![0; disk_size]);
+    /// gpt.to_writer(&mut buffer)?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn to_writer<W: Write + Seek>(&self, mut dest: W) -> Result<()> {
         let header = self.header.as_ref().context(InvalidGpt)?;
         let backup = self.backup.as_ref().context(InvalidGpt)?;
@@ -695,6 +727,10 @@ impl Gpt {
     }
 
     /// Adds a new partition
+    ///
+    /// ## Example
+    ///
+    /// See [`Gpt::new`]
     ///
     /// ## Panics
     ///
