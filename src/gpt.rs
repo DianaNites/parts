@@ -954,4 +954,24 @@ mod tests {
         // since we only depend on the first 92 bytes, and the rest is padding.
         assert_eq_size!(GptHeader, [u8; 96]);
     }
+
+    /// Test that we don't crash on header sizes
+    /// larger than the block size, or larger than [`GptHeader`]
+    #[test]
+    fn large_header_size() -> Result {
+        let disk_size = BLOCK_SIZE * 100;
+        let mut gpt = Gpt::new(BLOCK_SIZE, disk_size);
+        let header = gpt.header.as_mut().unwrap();
+        let backup = gpt.backup.as_mut().unwrap();
+        header.header_size = (BLOCK_SIZE * 2) as u32;
+        backup.header_size = (BLOCK_SIZE * 2) as u32;
+        // Don't recalculate the crc32 here, because the problem we're testing
+        // comes *from* calculating the crc32.
+        //
+        let mut v = Cursor::new(vec![0; disk_size as usize]);
+        gpt.to_writer(&mut v)?;
+        let gpt = Gpt::from_reader(&mut v, BLOCK_SIZE).unwrap_err();
+        dbg!(&gpt);
+        Ok(())
+    }
 }
