@@ -563,10 +563,30 @@ impl Gpt {
     ///     .finish();
     /// gpt.add_partition(part);
     /// ```
+    ///
+    /// ## Panics
+    ///
+    /// - If `disk_size` isn't large enough.
+    ///
+    /// Specifically, `disk_size` must be large enough to fit
+    /// the GPT Header, the minimum required Gpt Partition array,
+    /// and their backups.
+    ///
+    /// For a `block_size` of 512, this is 512 * 67.
+    /// Two blocks at the start, the MBR and GPT header,
+    /// 32 blocks for the partition array, one for the backup GPT header,
+    /// and 32 blocks for the backup partition array.
+    ///
+    /// Note that such a small size has no room for any partitions.
     pub fn new(block_size: u64, disk_size: u64) -> Self {
         // logical block addresses start at zero.
         let last_lba = (disk_size / block_size) - 1;
         let min_partition_blocks = MIN_PARTITIONS_BYTES / block_size;
+        //
+        assert!(
+            disk_size / block_size >= (min_partition_blocks + min_partition_blocks + 3),
+            "disk_size is too small to hold the GPT"
+        );
         //
         let mbr = ProtectiveMbr::new(last_lba);
         //
