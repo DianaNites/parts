@@ -23,4 +23,4 @@ static_assertions = "0.3.4"
 prettydiff = "0.3.1"
 
 [target.'cfg(fuzzing)'.dependencies]
-honggfuzz = "0.5"
+honggfuzz = "0.5.45"
