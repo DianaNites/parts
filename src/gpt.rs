@@ -454,7 +454,7 @@ impl Gpt {
         let mut backup: GptHeader = header.clone();
         backup.this_lba = last_lba;
         backup.alt_lba = 1;
-        // usable addresses are inclusive
+        // usable addresses are not inclusive
         backup.partition_array_start = backup.last_usable_lba + 1;
         backup.header_crc32 = 0;
         backup.header_crc32 = calculate_crc(&backup);
