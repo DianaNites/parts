@@ -1,0 +1,1 @@
+//! Known partition types
