@@ -640,11 +640,26 @@ impl Gpt {
     }
 
     /// Adds a new partition
+    ///
+    /// ## Panics
+    ///
+    /// - If the `GptPart` doesn't fit
+    /// within the first/last usable logical block addresses.
     pub fn add_partition(&mut self, part: GptPart) {
-        self.partitions.push(part);
-        //
         let header = self.header.as_mut().unwrap();
         let backup = self.backup.as_mut().unwrap();
+        //
+        assert!(
+            part.starting_lba >= header.first_usable_lba,
+            "Invalid Partition Span"
+        );
+        assert!(
+            part.ending_lba <= header.last_usable_lba,
+            "Invalid Partition Span"
+        );
+        //
+        self.partitions.push(part);
+        //
         header.partitions += 1;
         backup.partitions += 1;
         // FIXME: Support more partitions.
