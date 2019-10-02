@@ -293,6 +293,9 @@ impl GptPart {
     }
 
     /// Used by tests.
+    ///
+    /// Don't derive [`Default`] because this type is public,
+    /// and that wouldn't be valid.
     #[allow(dead_code)]
     fn empty() -> Self {
         GptPart {
