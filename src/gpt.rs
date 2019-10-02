@@ -243,6 +243,35 @@ impl GptHeader {
 }
 
 /// A GPT Partition
+///
+/// # Examples
+///
+/// List all partitions on a device
+///
+/// ```rust
+/// use parts::{Gpt, GptPartBuilder};
+/// use std::fs::File;
+///
+/// static PATH: &str = "tests/data/test_parts";
+/// // A reasonable-ish default size.
+/// const BLOCK_SIZE: u64 = 512;
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let mut gpt = Gpt::from_reader(File::open(PATH)?, BLOCK_SIZE)?;
+/// let part = GptPartBuilder::new(BLOCK_SIZE)
+///     .name("Example")
+///     .size(BLOCK_SIZE * 2)
+///     .start(34)
+///     .finish();
+/// for part in gpt.partitions() {
+///     match part.name() {
+///         Some(name) => println!("Partition Name: {}", name),
+///         None => println!("Partition has no name!"),
+///     };
+/// }
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Hash, PartialOrd, Ord)]
 #[repr(C)]
 pub struct GptPart {
@@ -269,6 +298,37 @@ pub struct GptPart {
 }
 
 impl GptPart {
+    /// Name of the partition, if any.
+    ///
+    /// The conversion to [`String`] from the native UTF-16 may be lossy.
+    pub fn name(&self) -> Option<String> {
+        if self.name[0] != 0 {
+            Some(String::from_utf16_lossy(
+                self.name.as_slice().split(|n| *n == 0).next().unwrap(),
+            ))
+        } else {
+            None
+        }
+    }
+
+    /// Type of the Partition
+    #[doc(hidden)]
+    pub fn part_type(&self) {
+        // TODO: Implement
+    }
+
+    /// The starting logical block address for the partition.
+    pub fn start(&self) -> u64 {
+        self.starting_lba
+    }
+
+    /// The ending logical block address for the partition.
+    ///
+    /// Note that this is inclusive.
+    pub fn end(&self) -> u64 {
+        self.ending_lba
+    }
+
     /// Reads a GPT Partition from a [`Read`]er.
     ///
     /// This will advance the [`Read`]er by the size of a single partition entry.
@@ -342,6 +402,25 @@ impl GptPartBuilder {
             start_lba: Default::default(),
             size: Default::default(),
             name: Default::default(),
+            block_size,
+        }
+    }
+
+    /// Create a [`GptPartBuilder`] based on an existing [`GptPart`].
+    ///
+    /// This allows you to modify an existing GptPart,
+    /// perhaps from [`Gpt::remove_partition`]
+    ///
+    /// # Notes
+    ///
+    /// The conversion of the partition name from UTF-16 to UTF-8 may be lossy.
+    pub fn from_part(part: GptPart, block_size: u64) -> Self {
+        GptPartBuilder {
+            partition_type_guid: part.partition_type_guid,
+            partition_guid: part.partition_guid,
+            start_lba: part.starting_lba,
+            size: ((part.ending_lba - part.starting_lba) * block_size) + block_size,
+            name: String::from_utf16_lossy(part.name.as_slice()),
             block_size,
         }
     }
@@ -766,6 +845,20 @@ impl Gpt {
         assert!(header.partitions <= 128, "Too many partitions");
         //
         self.recalculate_part_crc();
+    }
+
+    /// Remove an existing partition at the index `index`.
+    ///
+    /// Returns the removed partition.
+    /// This allows you to modify it using [`GptPartBuilder::from_part`] and then re-add it.
+    ///
+    /// Note that indexing starts at zero.
+    ///
+    /// # Panics
+    ///
+    /// - If `index` is out of bounds.
+    pub fn remove_partition(&mut self, index: usize) -> GptPart {
+        self.partitions.swap_remove(index)
     }
 
     /// Recalculate the primary and backup header crc
