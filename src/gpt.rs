@@ -9,6 +9,7 @@ use std::io::{prelude::*, SeekFrom};
 use uuid::Uuid;
 
 /// Gpt Error type.
+// FIXME: Better errors, public type. Classes.
 #[derive(Debug, Snafu)]
 pub struct GptError(InnerError);
 
