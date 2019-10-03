@@ -590,7 +590,7 @@ impl Gpt {
         let min_partition_blocks = ByteSize::from_bytes(MIN_PARTITIONS_BYTES) / block_size;
         //
         assert!(
-            (last_lba - 1) >= ((min_partition_blocks * 2) + 3),
+            (last_lba + 1) >= ((min_partition_blocks * 2) + 3),
             "disk_size is too small to hold the GPT"
         );
         //
@@ -1118,5 +1118,23 @@ mod tests {
         assert!(header.first_usable_lba >= LogicalBlockAddress(6));
         assert!(backup.first_usable_lba >= LogicalBlockAddress(6));
         Ok(())
+    }
+
+    /// Ensure that [`Gpt::new`] panics if the disk is too small.
+    #[test]
+    #[should_panic(expected = "disk_size is too small")]
+    fn small_disk() {
+        let disk_size = BLOCK_SIZE * 30;
+        let _gpt = Gpt::new(BLOCK_SIZE, disk_size.into());
+    }
+
+    /// Ensure that [`Gpt::new`] doesn't panics if the disk is
+    /// exactly the minimum size.
+    ///
+    /// Prevent an off-by-one error in minimum size checking.
+    #[test]
+    fn minimum_disk_regress() {
+        let disk_size = BLOCK_SIZE * 67;
+        let _gpt = Gpt::new(BLOCK_SIZE, disk_size.into());
     }
 }
