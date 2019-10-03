@@ -1,7 +1,9 @@
 //! MBR definitions
+use crate::types::*;
 use generic_array::{typenum::U440, GenericArray};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt, Snafu};
+use std::convert::TryFrom;
 use std::io::{prelude::*, SeekFrom};
 
 #[derive(Debug, Snafu)]
@@ -47,8 +49,7 @@ impl ProtectiveMbr {
     /// ## Arguments
     ///
     /// - `last_lba`, the last usable logical block address on the device.
-    pub(crate) fn new(last_lba: u64) -> Self {
-        let last_lba = last_lba;
+    pub(crate) fn new(last_lba: LogicalBlockAddress) -> Self {
         Self {
             boot_code: GenericArray::default(),
             unique_signature: [0u8; 4],
@@ -69,11 +70,7 @@ impl ProtectiveMbr {
                     end_track: 0xFF,
                     //
                     start_lba: 0x01,
-                    size_lba: if last_lba > u64::from(u32::max_value()) {
-                        u32::max_value()
-                    } else {
-                        last_lba as u32
-                    },
+                    size_lba: u32::try_from(last_lba.0).unwrap_or(u32::max_value()),
                 },
                 MbrPart::default(),
                 MbrPart::default(),
@@ -95,12 +92,15 @@ impl ProtectiveMbr {
     /// On success, this will have read exactly `block_size` bytes from the `Read`er.
     ///
     /// On error, the amount read is unspecified.
-    pub(crate) fn from_reader<R: Read + Seek>(mut source: R, block_size: u64) -> Result<Self> {
+    pub(crate) fn from_reader<R: Read + Seek>(
+        mut source: R,
+        block_size: BlockSize,
+    ) -> Result<Self> {
         let obj: Self = bincode::deserialize_from(&mut source).context(Parse)?;
         obj.validate()?;
         // Seek past the remaining block.
         source
-            .seek(SeekFrom::Current(block_size as i64 - 512))
+            .seek(SeekFrom::Current(block_size.0 as i64 - 512))
             .context(Io)?;
         Ok(obj)
     }
@@ -114,10 +114,14 @@ impl ProtectiveMbr {
     /// On success, this will have written exactly `block_size` bytes.
     ///
     /// On error, the amount written is unspecified.
-    pub(crate) fn to_writer<W: Write + Seek>(&self, mut dest: W, block_size: u64) -> Result<()> {
+    pub(crate) fn to_writer<W: Write + Seek>(
+        &self,
+        mut dest: W,
+        block_size: BlockSize,
+    ) -> Result<()> {
         bincode::serialize_into(&mut dest, self).context(Parse)?;
         // Account for reserved space.
-        let len = (block_size - 512) as usize;
+        let len = (block_size.0 - 512) as usize;
         dest.write_all(&vec![0; len]).context(Io)?;
         Ok(())
     }

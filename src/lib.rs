@@ -19,19 +19,19 @@
 //! Open a disk image file and add a partition.
 //!
 //! ```rust
-//! use parts::{Gpt, GptPartBuilder};
+//! use parts::{Gpt, GptPartBuilder, types::*};
 //! use std::fs::File;
 //!
 //! static PATH: &str = "tests/data/test_parts";
 //! // A reasonable-ish default size.
-//! const BLOCK_SIZE: u64 = 512;
+//! const BLOCK_SIZE: BlockSize = BlockSize(512);
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let mut gpt = Gpt::from_reader(File::open(PATH)?, BLOCK_SIZE)?;
 //! let part = GptPartBuilder::new(BLOCK_SIZE)
 //!     .name("Example")
-//!     .size(BLOCK_SIZE * 2)
-//!     .start(34)
+//!     .size((BLOCK_SIZE * 2).into())
+//!     .start(34.into())
 //!     .finish();
 //! gpt.add_partition(part);
 //! #
