@@ -44,6 +44,7 @@ mod gpt;
 mod mbr;
 #[doc(hidden)]
 pub mod partitions;
+pub mod types;
 
 pub use gpt::*;
 pub use uuid;
