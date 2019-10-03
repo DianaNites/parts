@@ -622,7 +622,7 @@ impl Gpt {
             header,
             backup,
             partitions: Vec::new(),
-            block_size: block_size,
+            block_size,
             disk_size,
         }
     }
