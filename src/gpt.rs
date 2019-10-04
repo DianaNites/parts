@@ -87,7 +87,10 @@ fn check_validity<RS: Read + Seek>(
         header.header_size <= std::mem::size_of::<GptHeader>() as u32,
         InvalidGptHeader
     );
-    ensure!(header.header_size as u64 <= block_size.0, InvalidGptHeader);
+    ensure!(
+        u64::from(header.header_size) <= block_size.0,
+        InvalidGptHeader
+    );
     let old_crc = std::mem::replace(&mut header.header_crc32, 0);
     let crc = calculate_crc(header);
     header.header_crc32 = old_crc;
@@ -595,7 +598,7 @@ impl Gpt {
             "disk_size is too small to hold the GPT"
         );
         //
-        let mbr = ProtectiveMbr::new(last_lba.into());
+        let mbr = ProtectiveMbr::new(last_lba);
         //
         let mut header = GptHeader::new();
         header.this_lba = 1.into();
@@ -949,7 +952,7 @@ mod tests {
     const BLOCK_SIZE: BlockSize = BlockSize(512);
     const LARGE_BLOCK_SIZE: BlockSize = BlockSize(4096);
     // 10 * 1024^2
-    const TEN_MIB_BYTES: usize = 10485760;
+    const TEN_MIB_BYTES: usize = 10_485_760;
 
     const CF_DISK_GUID: &str = "A17875FB-1D86-EE4D-8DFE-E3E8ABBCD364";
     const CF_PART_GUID: &str = "97954376-2BB6-534B-A015-DF434A94ABA2";
