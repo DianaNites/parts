@@ -913,7 +913,9 @@ impl Gpt {
     pub fn remove_partition(&mut self, index: usize) -> GptPart {
         self.partitions.swap_remove(index)
     }
+}
 
+impl Gpt {
     /// Recalculate the primary and backup header crc
     fn recalculate_crc(&mut self) {
         let header = self.header.as_mut().unwrap();
