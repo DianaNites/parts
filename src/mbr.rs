@@ -151,7 +151,7 @@ impl ProtectiveMbr {
 impl std::fmt::Debug for ProtectiveMbr {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         fmt.debug_struct("ProtectiveMbr")
-            .field("partition", &self.partitions[0])
+            .field("partition 0", &self.partitions[0])
             .finish()
     }
 }
