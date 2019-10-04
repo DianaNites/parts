@@ -521,6 +521,11 @@ impl GptPartBuilder {
 
 /// A GPT Disk
 ///
+///
+/// All modifications are done in-memory and
+/// the *only* method that will modify a real device/file is
+/// [`Gpt::to_writer`].
+///
 /// # Usage
 ///
 /// See [`Gpt::new`] and [`Gpt::from_reader`]
@@ -780,6 +785,10 @@ impl Gpt {
     /// On Linux this will use the `BLKSSZGET` `ioctl` to get the logical
     /// block size, and `BLKGETSIZE64` to get the byte size.
     ///
+    /// ## Errors
+    ///
+    /// - See [`Gpt::from_reader`] for details.
+    ///
     /// ## Panics
     ///
     /// - If the file is not a block device.
@@ -791,6 +800,11 @@ impl Gpt {
     }
 
     /// Write the GPT structure to a [`Write`]r.
+    ///
+    /// # Errors
+    ///
+    /// - If IO does.
+    /// - If this [`Gpt`] instance is corrupt.
     ///
     /// # Example
     ///
