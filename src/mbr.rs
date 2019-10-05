@@ -2,23 +2,51 @@
 use crate::types::*;
 use generic_array::{typenum::U440, GenericArray};
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, ResultExt, Snafu};
 use std::convert::TryFrom;
+use std::error::Error;
+use std::fmt;
 use std::io::{prelude::*, SeekFrom};
 
-#[derive(Debug, Snafu)]
+#[derive(Debug)]
 pub(crate) enum MbrError {
-    #[snafu(display("Invalid MBR Signature: {:?}", signature))]
-    Signature { signature: [u8; 2] },
+    ValidateError(&'static str),
+    ParseError(bincode::Error),
+    IoError(std::io::Error),
+}
 
-    #[snafu(display("Not a Protective MBR, has other partitions"))]
-    Validation {},
+impl MbrError {
+    const TOO_MANY_PARTITIONS: &'static str = "Too many partitions";
+    const INVALID_SIGNATURE: &'static str = "Signature Invalid";
+}
 
-    #[snafu(display("Error parsing MBR Header structure"))]
-    Parse { source: bincode::Error },
+impl fmt::Display for MbrError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::ValidateError(r) => write!(f, "Protective MBR is invalid: {}", r),
+            Self::ParseError(s) => write!(f, "Error parsing MBR: {}", s),
+            Self::IoError(s) => write!(f, "Error reading MBR: {}", s),
+        }
+    }
+}
 
-    #[snafu(display("Error reading from device"))]
-    Io { source: std::io::Error },
+impl Error for MbrError {}
+
+impl From<bincode::Error> for MbrError {
+    fn from(e: bincode::Error) -> MbrError {
+        Self::ParseError(e)
+    }
+}
+
+impl From<std::io::Error> for MbrError {
+    fn from(e: std::io::Error) -> MbrError {
+        Self::IoError(e)
+    }
+}
+
+impl From<&'static str> for MbrError {
+    fn from(s: &'static str) -> MbrError {
+        Self::ValidateError(s)
+    }
 }
 
 type Result<T, E = MbrError> = std::result::Result<T, E>;
@@ -96,12 +124,10 @@ impl ProtectiveMbr {
         mut source: R,
         block_size: BlockSize,
     ) -> Result<Self> {
-        let obj: Self = bincode::deserialize_from(&mut source).context(Parse)?;
+        let obj: Self = bincode::deserialize_from(&mut source)?;
         obj.validate()?;
         // Seek past the remaining block.
-        source
-            .seek(SeekFrom::Current(block_size.0 as i64 - 512))
-            .context(Io)?;
+        source.seek(SeekFrom::Current(block_size.0 as i64 - 512))?;
         Ok(obj)
     }
 
@@ -119,10 +145,11 @@ impl ProtectiveMbr {
         mut dest: W,
         block_size: BlockSize,
     ) -> Result<()> {
-        bincode::serialize_into(&mut dest, self).context(Parse)?;
+        bincode::serialize_into(&mut dest, self)?;
+        //.context(Parse)?;
         // Account for reserved space.
         let len = (block_size.0 - 512) as usize;
-        dest.write_all(&vec![0; len]).context(Io)?;
+        dest.write_all(&vec![0; len])?;
         Ok(())
     }
 
@@ -133,16 +160,15 @@ impl ProtectiveMbr {
     /// - Ensures the signature is correct.
     /// - Ensures there are no other partitions.
     fn validate(&self) -> Result<()> {
-        ensure!(
-            self.signature[0] == 0x55 && self.signature[1] == 0xAA,
-            Signature {
-                signature: self.signature
-            }
-        );
+        if self.signature[0] != 0x55 || self.signature[1] != 0xAA {
+            return Err(MbrError::INVALID_SIGNATURE.into());
+        }
         // TODO: Validate starting CHS
         // NOTE: parted writes an invalid MBR with an invalid CHS.
         for part in &self.partitions[1..] {
-            ensure!(*part == MbrPart::default(), Validation);
+            if *part != MbrPart::default() {
+                return Err(MbrError::TOO_MANY_PARTITIONS.into());
+            }
         }
         Ok(())
     }

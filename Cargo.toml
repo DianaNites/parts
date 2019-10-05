@@ -12,13 +12,6 @@ crc = "1.8.1"
 generic-array = { version = "0.13.2", features = ["serde"] }
 derive_more = "0.15.0"
 
-[dependencies.snafu]
-version = "0.5.0"
-default-features = false
-features = [
-    "rust_1_30",
-]
-
 [dev-dependencies]
 static_assertions = "1.0.0"
 prettydiff = "0.3.1"

@@ -4,48 +4,105 @@ use crate::types::*;
 use crc::crc32;
 use generic_array::{typenum::U36, GenericArray};
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, OptionExt, ResultExt, Snafu};
+use std::error::Error;
+use std::fmt;
 use std::io::{prelude::*, SeekFrom};
 use uuid::Uuid;
 
 /// Gpt Error type.
+///
+/// This type is opaque because
 // FIXME: Better errors, public type. Classes.
-#[derive(Debug, Snafu)]
-pub struct GptError(InnerError);
-
-#[derive(Debug, Snafu)]
+#[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
-enum InnerError {
-    #[snafu(display("Invalid GPT Header Signature"))]
-    Signature {},
+pub struct GptError(ErrorKind);
 
-    #[snafu(display("GPT Header Checksum Mismatch"))]
-    HeaderChecksumMismatch {},
-
-    #[snafu(display("GPT Partitions Checksum Mismatch"))]
-    PartitionsChecksumMismatch {},
-
-    #[snafu(display("Error reading from device"))]
-    Io { source: std::io::Error },
-
-    #[snafu(display("Error parsing GPT Header structure"))]
-    Parse { source: bincode::Error },
-
-    #[snafu(display("{}", source))]
-    MbrError { source: crate::mbr::MbrError },
-
-    #[snafu(display("Invalid Block Size: Must be power of 2"))]
-    InvalidBlockSize {},
-
-    #[snafu(display("The GPT Table is invalid and can't be written"))]
-    InvalidGpt {},
-
-    #[snafu(display("The GPT Header is invalid and can't be read."))]
-    InvalidGptHeader {},
-
-    #[snafu(display("The GPT Table is corrupt, but can be repaired."))]
-    CorruptGpt { gpt: Gpt },
+impl GptError {
+    const INVALID_SIGNATURE: &'static str = "GPT Signature Invalid";
+    const INVALID_HEADER_SIZE: &'static str = "Unsupported GPT Header Size";
+    const INVALID_CHECKSUM: &'static str = "The GPT Header CRC32 is invalid";
+    const INVALID_LBA: &'static str =
+        "The GPT Header Logical Block Address is invalid. The disk may have changed size";
+    const INVALID_PART_CHECKSUM: &'static str =
+        "The GPT partitions array CRC32 is invalid. Your partitions are corrupt.";
 }
+
+impl<T: Into<ErrorKind>> From<T> for GptError {
+    fn from(e: T) -> Self {
+        Self(e.into())
+    }
+}
+
+impl Error for GptError {}
+
+impl fmt::Display for GptError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+mod private {
+    use super::*;
+    #[derive(Debug)]
+    #[allow(clippy::large_enum_variant)]
+    pub enum ErrorKind {
+        ///
+        ValidateError(&'static str),
+        ///
+        IoError(std::io::Error),
+        ///
+        ParseError(bincode::Error),
+        ///
+        InvalidBlockSize,
+
+        ///
+        InvalidGptHeader,
+
+        /// #[snafu(display("The GPT Table is invalid and can't be written"))]
+        InvalidGpt,
+
+        /// #[snafu(display("The GPT Table is corrupt, but can be repaired."))]
+        CorruptGpt(Gpt),
+    }
+
+    impl fmt::Display for ErrorKind {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            match self {
+                Self::ValidateError(r) => write!(f, "GPT Header is invalid: {}", r),
+                Self::IoError(r) => write!(f, "Error Reading GPT: {}", r),
+                Self::ParseError(r) => write!(f, "Error Parsing GPT: {}", r),
+                Self::InvalidBlockSize => write!(f, "Invalid BlockSize: Must be a power of `2`"),
+                _ => unimplemented!(),
+}
+        }
+    }
+
+    impl From<&'static str> for ErrorKind {
+        fn from(s: &'static str) -> Self {
+            Self::ValidateError(s)
+        }
+    }
+
+    impl From<bincode::Error> for ErrorKind {
+        fn from(s: bincode::Error) -> Self {
+            Self::ParseError(s)
+        }
+    }
+
+    impl From<std::io::Error> for ErrorKind {
+        fn from(s: std::io::Error) -> Self {
+            Self::IoError(s)
+        }
+    }
+
+    impl From<MbrError> for ErrorKind {
+        fn from(s: MbrError) -> Self {
+            // TODO: source
+            Self::InvalidGptHeader
+        }
+    }
+}
+use private::*;
 
 type Result<T, E = GptError> = std::result::Result<T, E>;
 
@@ -79,37 +136,39 @@ fn check_validity<RS: Read + Seek>(
     header: &mut GptHeader,
     mut source: RS,
     block_size: BlockSize,
-) -> Result<(), InnerError> {
-    ensure!(header.signature == EFI_PART, Signature);
-    ensure!(header.header_size >= 92, InvalidGptHeader);
+) -> Result<()> {
+    if header.signature != EFI_PART && header.header_size <= 92 {
+        return Err(GptError::INVALID_SIGNATURE.into());
+    };
+    if u64::from(header.header_size) >= block_size.0 {
+        return Err(GptError::INVALID_HEADER_SIZE.into());
+    };
     // FIXME: This one shouldn't be a requirement.
-    ensure!(
-        header.header_size <= std::mem::size_of::<GptHeader>() as u32,
-        InvalidGptHeader
-    );
-    ensure!(
-        u64::from(header.header_size) <= block_size.0,
-        InvalidGptHeader
-    );
+    if header.header_size > 92 {
+        return Err(GptError::INVALID_HEADER_SIZE.into());
+    };
     let old_crc = std::mem::replace(&mut header.header_crc32, 0);
     let crc = calculate_crc(header);
     header.header_crc32 = old_crc;
-    ensure!(crc == old_crc, HeaderChecksumMismatch);
+    if crc != old_crc {
+        return Err(GptError::INVALID_CHECKSUM.into());
+    };
     //
-    let current_lba =
-        LogicalBlockAddress(source.seek(SeekFrom::Current(0)).context(Io)? / block_size.0);
-    ensure!(header.this_lba == current_lba, InvalidGptHeader);
+    let current_lba = LogicalBlockAddress(source.seek(SeekFrom::Current(0))? / block_size.0);
+    if header.this_lba != current_lba {
+        return Err(GptError::INVALID_LBA.into());
+    };
     //
-    source
-        .seek(SeekFrom::Start(
+    source.seek(SeekFrom::Start(
             (header.partition_array_start * block_size).as_bytes(),
-        ))
-        .context(Io)?;
+    ))?;
     let mut buf: Vec<u8> = Vec::with_capacity((header.partitions * header.partition_size) as usize);
     buf.resize(buf.capacity(), 0);
-    source.read_exact(&mut buf).context(Io)?;
+    source.read_exact(&mut buf)?;
     let crc = crc32::checksum_ieee(&buf);
-    ensure!(crc == header.partitions_crc32, PartitionsChecksumMismatch);
+    if crc != header.partitions_crc32 {
+        return Err(GptError::INVALID_PART_CHECKSUM.into());
+    }
     //
     Ok(())
 }
@@ -237,15 +296,15 @@ impl GptHeader {
     ///
     /// The [`Read`]ers current position is undefined after this call.
     fn from_reader<R: Read>(mut source: R) -> Result<Self> {
-        Ok(bincode::deserialize_from(&mut source).context(Parse)?)
+        Ok(bincode::deserialize_from(&mut source)?)
     }
 
     /// Write the GPT Header to a [`Write`]r.
     fn to_writer<W: Write>(&self, mut dest: W, block_size: u64) -> Result<()> {
-        bincode::serialize_into(&mut dest, self).context(Parse)?;
+        bincode::serialize_into(&mut dest, self)?;
         // Account for reserved space.
         let len = (block_size - 92) as usize;
-        dest.write_all(&vec![0; len]).context(Io)?;
+        dest.write_all(&vec![0; len])?;
         Ok(())
     }
 }
@@ -343,20 +402,18 @@ impl GptPart {
     ///
     /// `size_of` is [`GptHeader::partition_size`]
     fn from_reader<R: Read + Seek>(mut source: R, size_of: u32) -> Result<Self> {
-        let obj = bincode::deserialize_from(&mut source).context(Parse)?;
+        let obj = bincode::deserialize_from(&mut source)?;
         // Seek past the remaining block.
-        source
-            .seek(SeekFrom::Current(i64::from(size_of) - 128))
-            .context(Io)?;
+        source.seek(SeekFrom::Current(i64::from(size_of) - 128))?;
         Ok(obj)
     }
 
     /// Write a GPT Partition to a [`Write`]r
     fn to_writer<W: Write>(&self, mut dest: W, size_of: u32) -> Result<()> {
-        bincode::serialize_into(&mut dest, self).context(Parse)?;
+        bincode::serialize_into(&mut dest, self)?;
         // Account for reserved space.
         let len = (size_of - 128) as usize;
-        dest.write_all(&vec![0; len]).context(Io)?;
+        dest.write_all(&vec![0; len])?;
         Ok(())
     }
 
@@ -694,15 +751,18 @@ impl Gpt {
         RS: Read + Seek,
     {
         if !(block_size.0).is_power_of_two() {
-            return InvalidBlockSize.fail().map_err(|e| e.into());
+            return Err(ErrorKind::InvalidBlockSize.into());
         }
         //
-        let disk_size = ByteSize::from_bytes(source.seek(SeekFrom::End(0)).context(Io)?);
-        source.seek(SeekFrom::Start(0)).context(Io)?;
+        let disk_size = ByteSize::from_bytes(source.seek(SeekFrom::End(0))?);
+        source.seek(SeekFrom::Start(0))?;
         //
-        let mbr = ProtectiveMbr::from_reader(&mut source, block_size).context(MbrError)?;
+        // FIXME: Before committing. This unwrap.
+        let mbr = ProtectiveMbr::from_reader(&mut source, block_size)?;
+        // eprintln!("{}", mbr.as_ref().unwrap_err());
+        // let mbr = mbr.unwrap();
+        //
         let header = GptHeader::from_reader(&mut source).and_then(|mut x| {
-            //
             match check_validity(&mut x, &mut source, block_size) {
                 Ok(_) => Ok(x),
                 Err(e) => Err(e.into()),
@@ -712,11 +772,9 @@ impl Gpt {
         let mut partitions = Vec::new();
 
         if let Ok(header) = &header {
-            source
-                .seek(SeekFrom::Start(
+            source.seek(SeekFrom::Start(
                     (header.partition_array_start * block_size).as_bytes(),
-                ))
-                .context(Io)?;
+            ))?;
             partitions.reserve_exact(header.partitions as usize);
             for _ in 0..header.partitions {
                 let part = GptPart::from_reader(&mut source, header.partition_size)?;
@@ -727,17 +785,12 @@ impl Gpt {
                 }
             }
             // Prepare for the backup GPT header to be read.
-            source
-                .seek(SeekFrom::Start((header.alt_lba * block_size).as_bytes()))
-                .context(Io)?;
+            source.seek(SeekFrom::Start((header.alt_lba * block_size).as_bytes()))?;
         } else {
-            source
-                .seek(SeekFrom::End(-(block_size.0 as i64)))
-                .context(Io)?;
+            source.seek(SeekFrom::End(-(block_size.0 as i64)))?;
         }
         //
         let backup = GptHeader::from_reader(&mut source).and_then(|mut x| {
-            //
             match check_validity(&mut x, &mut source, block_size) {
                 Ok(_) => Ok(x),
                 Err(e) => Err(e.into()),
@@ -745,11 +798,9 @@ impl Gpt {
         });
 
         if let Ok(backup) = &backup {
-            source
-                .seek(SeekFrom::Start(
+            source.seek(SeekFrom::Start(
                     (backup.partition_array_start * block_size).as_bytes(),
-                ))
-                .context(Io)?;
+            ))?;
             if header.is_err() {
                 partitions.reserve_exact(backup.partitions as usize);
                 for _ in 0..backup.partitions {
@@ -774,9 +825,9 @@ impl Gpt {
             disk_size,
         };
         match (b_err, h_err) {
-            (true, true) => InvalidGptHeader.fail().map_err(Into::into),
+            (true, true) => Err(ErrorKind::InvalidGptHeader.into()),
             (false, false) => Ok(gpt),
-            (_, _) => CorruptGpt { gpt }.fail().map_err(Into::into),
+            (_, _) => Err(ErrorKind::CorruptGpt(gpt).into()),
         }
     }
 
@@ -823,33 +874,35 @@ impl Gpt {
     /// # }
     /// ```
     pub fn to_writer<W: Write + Seek>(&self, mut dest: W) -> Result<()> {
-        let header = self.header.as_ref().context(InvalidGpt)?;
-        let backup = self.backup.as_ref().context(InvalidGpt)?;
+        let header = self
+            .header
+            .as_ref()
+            .ok_or(Into::<GptError>::into(ErrorKind::InvalidGpt))?;
+        let backup = self
+            .backup
+            .as_ref()
+            .ok_or(Into::<GptError>::into(ErrorKind::InvalidGpt))?;
         //
-        self.mbr
-            .to_writer(&mut dest, self.block_size)
-            .context(MbrError)?;
+        // FIXME: Before committing, this unwrap.
+        self.mbr.to_writer(&mut dest, self.block_size).unwrap();
 
         header.to_writer(&mut dest, self.block_size.0)?;
 
         dest.seek(SeekFrom::Start(
             (header.partition_array_start * self.block_size).as_bytes(),
-        ))
-        .context(Io)?;
+        ))?;
         for part in &self.partitions {
             part.to_writer(&mut dest, header.partition_size)?;
         }
 
         dest.seek(SeekFrom::Start(
             (header.alt_lba * self.block_size).as_bytes(),
-        ))
-        .context(Io)?;
+        ))?;
         backup.to_writer(&mut dest, self.block_size.0)?;
 
         dest.seek(SeekFrom::Start(
             (backup.partition_array_start * self.block_size).as_bytes(),
-        ))
-        .context(Io)?;
+        ))?;
         for part in &self.partitions {
             part.to_writer(&mut dest, backup.partition_size)?;
         }
