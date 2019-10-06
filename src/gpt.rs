@@ -762,8 +762,12 @@ impl Gpt {
             return Err(GptError::InvalidBlockSize);
         }
         //
-        let disk_size = ByteSize::from_bytes(source.seek(SeekFrom::End(0))?);
-        source.seek(SeekFrom::Start(0))?;
+        let disk_size = {
+            let cur = source.seek(SeekFrom::Current(0))?;
+            let end = ByteSize::from_bytes(source.seek(SeekFrom::End(0))?);
+            source.seek(SeekFrom::Start(cur))?;
+            end
+        };
         //
         let mbr = ProtectiveMbr::from_reader(&mut source, block_size)?;
         //
