@@ -855,12 +855,15 @@ impl Gpt {
     /// ## Panics
     ///
     /// - If the file is not a block device.
-    /// - If the `ioctl` fail.
+    /// - If the `ioctl` fails.
     /// - For any reason [`Gpt::from_reader`] would panic.
-    #[doc(hidden)]
-    pub fn from_file() -> Self {
-        // TODO: from_file
-        unimplemented!()
+    ///
+    /// ## Platform Support
+    ///
+    /// This method only supports Linux, because `ioctl` is Linux-specific.
+    /// On windows you'll have to specify the block size yourself.
+    #[cfg(any(target_os = "linux", all(feature = "nightly", rustdoc)))]
+    #[cfg_attr(all(feature = "nightly", rustdoc), doc(cfg(target_os = "linux")))]
     }
 
     /// Set the disk GUID.

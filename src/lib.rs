@@ -39,7 +39,7 @@
 //! # }
 //! ```
 #![deny(missing_docs)]
-
+#![cfg_attr(feature = "nightly", feature(doc_cfg))]
 mod gpt;
 mod mbr;
 #[doc(hidden)]
