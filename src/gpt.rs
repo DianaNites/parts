@@ -1082,6 +1082,18 @@ impl Gpt {
     pub fn remove_partition(&mut self, index: usize) -> GptPart {
         self.partitions.swap_remove(index)
     }
+
+    /// Get the first logical block address you can use for partitions.
+    /// This is useful with [`GptPartBuilder`]
+    pub fn first_usable_address(&self) -> LogicalBlockAddress {
+        self.header.as_ref().unwrap().first_usable_lba
+    }
+
+    /// Get the last logical block address you can use for partitions.
+    /// This is useful with [`GptPartBuilder`]
+    pub fn last_usable_address(&self) -> LogicalBlockAddress {
+        self.header.as_ref().unwrap().last_usable_lba
+    }
 }
 
 impl Gpt {
