@@ -9,9 +9,9 @@ use std::io::{prelude::*, SeekFrom};
 
 #[derive(Debug)]
 pub(crate) enum MbrError {
-    ValidateError(&'static str),
-    ParseError(bincode::Error),
-    IoError(std::io::Error),
+    Validate(&'static str),
+    Parse(bincode::Error),
+    Io(std::io::Error),
 }
 
 impl MbrError {
@@ -22,9 +22,9 @@ impl MbrError {
 impl fmt::Display for MbrError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::ValidateError(r) => write!(f, "Protective MBR is invalid: {}", r),
-            Self::ParseError(s) => write!(f, "Error parsing MBR: {}", s),
-            Self::IoError(s) => write!(f, "Error reading MBR: {}", s),
+            Self::Validate(r) => write!(f, "Protective MBR is invalid: {}", r),
+            Self::Parse(s) => write!(f, "Error parsing MBR: {}", s),
+            Self::Io(s) => write!(f, "Error reading MBR: {}", s),
         }
     }
 }
@@ -33,19 +33,19 @@ impl Error for MbrError {}
 
 impl From<bincode::Error> for MbrError {
     fn from(e: bincode::Error) -> MbrError {
-        Self::ParseError(e)
+        Self::Parse(e)
     }
 }
 
 impl From<std::io::Error> for MbrError {
     fn from(e: std::io::Error) -> MbrError {
-        Self::IoError(e)
+        Self::Io(e)
     }
 }
 
 impl From<&'static str> for MbrError {
     fn from(s: &'static str) -> MbrError {
-        Self::ValidateError(s)
+        Self::Validate(s)
     }
 }
 
