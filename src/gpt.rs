@@ -998,18 +998,38 @@ impl Gpt {
     ///
     /// - If the [`GptPart`] doesn't fit
     /// within the first/last usable logical block addresses.
+    /// - If `part` overlaps with any existing partition.
     pub fn add_partition(&mut self, part: GptPart) {
         let header = self.header.as_mut().unwrap();
         let backup = self.backup.as_mut().unwrap();
         //
         assert!(
             part.starting_lba >= header.first_usable_lba,
-            "Invalid Partition Span"
+            format!(
+                "Invalid Partition Span: {:?}",
+                (part.starting_lba, part.ending_lba)
+            )
         );
         assert!(
             part.ending_lba <= header.last_usable_lba,
-            "Invalid Partition Span"
+            format!(
+                "Invalid Partition Span: {:?}",
+                (part.starting_lba, part.ending_lba)
+            )
         );
+        for existing in &self.partitions {
+            if part.starting_lba >= existing.starting_lba
+                && part.starting_lba <= existing.ending_lba
+            {
+                panic!(
+                    "Attempted to add overlapping partitions. `{:#?}` overlaps with `{:#?}`",
+                    part, existing
+                );
+            }
+        }
+        // FIXME: Support more partitions.
+        // This would require moving the first usable lba forward, and the last usable one back.
+        assert!(header.partitions <= 128, "Too many partitions");
         //
         self.partitions.push(part);
         // `GptHeader::partitions` can be larger than the
@@ -1018,9 +1038,6 @@ impl Gpt {
             header.partitions += 1;
             backup.partitions += 1;
         }
-        // FIXME: Support more partitions.
-        // This would require moving the first usable lba forward, and the last usable one back.
-        assert!(header.partitions <= 128, "Too many partitions");
         //
         self.recalculate_part_crc();
     }
@@ -1314,5 +1331,23 @@ mod tests {
     fn missing_gpt_test() {
         let data = Cursor::new(vec![0; TEN_MIB_BYTES]);
         let _gpt = Gpt::from_reader(data, BlockSize(512)).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "Attempted to add overlapping partitions")]
+    fn invalid_partitions() {
+        let mut gpt = Gpt::new(BLOCK_SIZE, ByteSize::from_bytes(TEN_MIB_BYTES as u64));
+        let part = GptPartBuilder::new(BLOCK_SIZE)
+            .size(ByteSize::from_mib(8))
+            .start(ByteSize::from_mib(1) / BLOCK_SIZE)
+            .part_type(Uuid::parse_str(LINUX_PART_GUID).unwrap())
+            .finish();
+        let dup_part = GptPartBuilder::new(BLOCK_SIZE)
+            .size(ByteSize::from_mib(8))
+            .start(ByteSize::from_mib(1) / BLOCK_SIZE)
+            .part_type(Uuid::parse_str(LINUX_PART_GUID).unwrap())
+            .finish();
+        gpt.add_partition(part);
+        gpt.add_partition(dup_part);
     }
 }
