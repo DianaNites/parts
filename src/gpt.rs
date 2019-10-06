@@ -1,5 +1,6 @@
 //! Gpt Definitions
 use crate::mbr::*;
+use crate::partitions::*;
 use crate::types::*;
 use crc::crc32;
 use generic_array::{typenum::U36, GenericArray};
@@ -369,7 +370,7 @@ pub struct GptPart {
 impl fmt::Debug for GptPart {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.debug_struct("GptPart")
-            .field("partition_type_guid", &self.partition_type_guid)
+            .field("partition_type_guid", &self.part_type())
             .field("partition_guid", &self.partition_guid)
             .field("starting_lba", &self.starting_lba)
             .field("ending_lba", &self.ending_lba)
@@ -394,9 +395,10 @@ impl GptPart {
     }
 
     /// Type of the Partition
-    #[doc(hidden)]
-    pub fn part_type(&self) {
-        // TODO: Implement
+    ///
+    /// See [`PartitionType`] for details
+    pub fn part_type(&self) -> PartitionType {
+        PartitionType::from_uuid(uuid_hack(self.partition_type_guid))
     }
 
     /// The starting logical block address for the partition.
@@ -568,9 +570,9 @@ impl GptPartBuilder {
     }
 
     /// Partition type GUID.
-    // TODO: Known partition type constants.
-    pub fn part_type(mut self, part_type: Uuid) -> Self {
-        self.partition_type_guid = uuid_hack(part_type);
+    pub fn part_type(mut self, part_type: PartitionType) -> Self {
+        // FIXME: uuid_hack strikes again
+        self.partition_type_guid = uuid_hack(part_type.to_uuid());
         self
     }
 
@@ -1137,7 +1139,7 @@ mod tests {
 
     const CF_DISK_GUID: &str = "A17875FB-1D86-EE4D-8DFE-E3E8ABBCD364";
     const CF_PART_GUID: &str = "97954376-2BB6-534B-A015-DF434A94ABA2";
-    const LINUX_PART_GUID: &str = "0FC63DAF-8483-4772-8E79-3D69D8477DE4";
+    const LINUX_PART_GUID: PartitionType = PartitionType::LinuxFilesystemData;
 
     type Result = std::result::Result<(), Box<dyn Error>>;
 
@@ -1212,7 +1214,7 @@ mod tests {
         let mut part = GptPartBuilder::new(BLOCK_SIZE)
             .size(ByteSize::from_mib(8))
             .start(ByteSize::from_mib(1) / BLOCK_SIZE)
-            .part_type(Uuid::parse_str(LINUX_PART_GUID)?);
+            .part_type(LINUX_PART_GUID);
         dbg!(&part);
         unsafe {
             part = part.part_guid(Uuid::parse_str(CF_PART_GUID)?);
@@ -1367,7 +1369,7 @@ mod tests {
         let part = GptPartBuilder::new(BLOCK_SIZE)
             .size(ByteSize::from_mib(8))
             .start(ByteSize::from_mib(1) / BLOCK_SIZE)
-            .part_type(Uuid::parse_str(LINUX_PART_GUID).unwrap())
+            .part_type(LINUX_PART_GUID)
             .finish();
         let dup_part = part.clone();
         gpt.add_partition(part);
