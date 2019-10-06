@@ -66,11 +66,13 @@ impl fmt::Display for GptError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::IoError(e) => write!(f, "Error Reading GPT: {}", e),
-            Self::InvalidGpt(e) => write!(f, "GPT is invalid: {}", e),
+            Self::InvalidGpt(e) => write!(f, "GPT is invalid.\nCause: {}", e),
             Self::InvalidBlockSize => write!(f, "Invalid BlockSize: Must be a power of `2`"),
-            Self::CorruptGpt(_, e) => write!(f, "GPT is corrupt, but can be repaired: {}", e),
+            Self::CorruptGpt(_, e) => {
+                write!(f, "GPT is corrupt, but can be repaired.\nCause: {}", e)
         }
     }
+}
 }
 
 impl From<bincode::Error> for GptError {
