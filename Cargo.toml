@@ -19,6 +19,9 @@ prettydiff = "0.3.1"
 [target.'cfg(fuzzing)'.dependencies]
 honggfuzz = "0.5.45"
 
+[target.'cfg(unix)'.dependencies]
+nix = "0.15.0"
+
 [features]
 # Nightly is used for docs.
 nightly = []
