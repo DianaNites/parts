@@ -1114,6 +1114,23 @@ impl Gpt {
     pub fn last_usable_address(&self) -> LogicalBlockAddress {
         self.header.as_ref().unwrap().last_usable_lba
     }
+
+    /// If the underlying device has somehow grown larger,
+    /// you won't be able to use [`Gpt::to_writer`].
+    ///
+    /// This will update the GPT and allow it to be written.
+    pub fn update_disk_size(&mut self, new_size: ByteSize) {
+        let header = self.header.as_mut().unwrap();
+        let backup = self.backup.as_mut().unwrap();
+        //
+        self.disk_size = new_size;
+        let min_partition_blocks = ByteSize::from_bytes(MIN_PARTITIONS_BYTES) / self.block_size;
+        let last_lba = (self.disk_size / self.block_size) - 1;
+        //
+        header.last_usable_lba = last_lba - min_partition_blocks - 1;
+        backup.this_lba = last_lba;
+        self.recalculate_crc();
+    }
 }
 
 impl Gpt {
