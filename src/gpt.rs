@@ -1189,7 +1189,7 @@ mod tests {
         //
         let src_gpt = Gpt::from_reader(file, BLOCK_SIZE)?;
         //
-        let mut buf = Cursor::new(Vec::with_capacity(TEN_MIB_BYTES));
+        let mut buf = Cursor::new(vec![0; TEN_MIB_BYTES]);
         src_gpt.to_writer(&mut buf)?;
         buf.set_position(0);
         //
@@ -1208,7 +1208,7 @@ mod tests {
         //
         let src_gpt = Gpt::from_reader(Cursor::new(&mut src_buf), BLOCK_SIZE)?;
         //
-        let mut buf = Cursor::new(Vec::with_capacity(TEN_MIB_BYTES));
+        let mut buf = Cursor::new(vec![0; TEN_MIB_BYTES]);
         src_gpt.to_writer(&mut buf).unwrap();
         //
         let v = buf.get_mut();
