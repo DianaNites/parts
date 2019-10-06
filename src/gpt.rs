@@ -616,6 +616,7 @@ impl GptPartBuilder {
 /// for the purposes of repairing it.
 ///
 /// Using such an instance without repairing it may cause certain methods to panic.
+/// The only method safe to use is [`Gpt::repair`].
 #[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, Ord)]
 pub struct Gpt {
     mbr: ProtectiveMbr,
@@ -718,8 +719,6 @@ impl Gpt {
 
     /// Read from an existing GPT Disk or image.
     ///
-    /// Note that it is statically impossible for this to modify the underlying device.
-    ///
     /// ## Arguments
     ///
     /// - `block_size` is the devices logical block size. ex: 512, 4096
@@ -750,10 +749,6 @@ impl Gpt {
     /// which should be repaired after asking permission from the user.
     ///
     /// If both the primary and backup GPT is corrupt, repairing will not be possible.
-    ///
-    /// ## Panics
-    ///
-    /// - If the Gpt Instance is invalid, other methods may panic.
     pub fn from_reader<RS>(mut source: RS, block_size: BlockSize) -> Result<Self>
     where
         RS: Read + Seek,
