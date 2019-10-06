@@ -75,12 +75,14 @@ impl fmt::Display for GptError {
     }
 }
 
+#[doc(hidden)]
 impl From<bincode::Error> for GptError {
     fn from(s: bincode::Error) -> Self {
         Self::InvalidGpt(s)
     }
 }
 
+#[doc(hidden)]
 impl From<std::io::Error> for GptError {
     fn from(s: std::io::Error) -> Self {
         Self::IoError(s)
