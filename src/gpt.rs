@@ -859,6 +859,7 @@ impl Gpt {
     /// - For any reason [`Gpt::from_reader`] would panic.
     #[doc(hidden)]
     pub fn from_file() -> Self {
+        // TODO: from_file
         unimplemented!()
     }
 
