@@ -70,9 +70,9 @@ impl fmt::Display for GptError {
             Self::InvalidBlockSize => write!(f, "Invalid BlockSize: Must be a power of `2`"),
             Self::CorruptGpt(_, e) => {
                 write!(f, "GPT is corrupt, but can be repaired.\nCause: {}", e)
+            }
         }
     }
-}
 }
 
 impl From<bincode::Error> for GptError {
@@ -863,6 +863,54 @@ impl Gpt {
         unimplemented!()
     }
 
+    /// Repair an invalid GPT instance.
+    ///
+    /// An invalid GPT instance is one with a corrupt or missing
+    /// backup or primary label.
+    ///
+    /// Repairing such an instance involves duplicating the existing label
+    /// and replacing the corrupt area.
+    ///
+    /// Only call this method with permission from the user.
+    ///
+    /// # Examples
+    ///
+    /// Pseudo-code showing how to repair a corrupt [`Gpt`]
+    ///
+    /// ```rust,compile_fail
+    /// let corrupt_gpt = Gpt::from_reader(Cursor::new(&mut corrupted_buf), BLOCK_SIZE);
+    /// match corrupt_gpt {
+    ///     Err(GptError::CorruptGpt(mut gpt, _)) => {
+    ///         assert_eq!(gpt.header, None);
+    ///         assert_eq!(gpt.backup, Some(_));
+    ///         gpt.repair();
+    ///         assert_eq!(gpt.header, uncorrupted_gpt.header);
+    ///     }
+    /// }
+    /// ```
+    pub fn repair(&mut self) {
+        if self.header.is_none() || self.backup.is_none() {
+            let last_lba = (self.disk_size / self.block_size) - 1;
+            if let Some(header) = &self.header {
+                let mut backup = header.clone();
+                backup.this_lba = last_lba;
+                backup.alt_lba = 1.into();
+                backup.partition_array_start = header.last_usable_lba + 1;
+                backup.header_crc32 = 0;
+                backup.header_crc32 = calculate_crc(&backup);
+                self.backup = Some(backup);
+            } else if let Some(backup) = &self.backup {
+                let mut header = backup.clone();
+                header.this_lba = 1.into();
+                header.alt_lba = last_lba;
+                header.partition_array_start = 2.into();
+                header.header_crc32 = 0;
+                header.header_crc32 = calculate_crc(&header);
+                self.header = Some(header);
+            }
+        }
+    }
+
     /// Write the GPT structure to a [`Write`]r.
     ///
     /// # Errors
@@ -1015,14 +1063,10 @@ impl Gpt {
 
 #[cfg(test)]
 mod tests {
-    use super::{Gpt, GptHeader, GptPart, GptPartBuilder};
-    use crate::types::*;
+    use super::*;
     use prettydiff::{basic::DiffOp, diff_slice};
     use static_assertions::*;
-    use std::{
-        error::Error,
-        io::{prelude::*, Cursor},
-    };
+    use std::{error::Error, io::Cursor};
     use uuid::Uuid;
 
     static TEST_PARTS: &str = "tests/data/test_parts";
@@ -1218,5 +1262,42 @@ mod tests {
     fn minimum_disk_regress() {
         let disk_size = BLOCK_SIZE * 67;
         let _gpt = Gpt::new(BLOCK_SIZE, disk_size.into());
+    }
+
+    /// Ensure that the GPT can properly be repaired if only one header is corrupt.
+    #[test]
+    fn corrupt_gpt_test() {
+        let mut file = std::fs::File::open(TEST_PARTS_CF).unwrap();
+        let mut src_buf = Vec::with_capacity(TEN_MIB_BYTES);
+        file.read_to_end(&mut src_buf).unwrap();
+        //
+        let src_gpt = Gpt::from_reader(Cursor::new(&mut src_buf), BLOCK_SIZE).unwrap();
+        // Invalidate the primary GPT
+        src_buf[512] = 0;
+        //
+        let gpt = Gpt::from_reader(Cursor::new(&mut src_buf), BLOCK_SIZE);
+        match gpt {
+            Err(GptError::CorruptGpt(mut gpt, _)) => {
+                assert_eq!(gpt.header, None);
+                gpt.repair();
+                dbg!(&gpt.header);
+                dbg!(&src_gpt.header);
+                assert_eq!(gpt.header, src_gpt.header);
+            }
+            g => {
+                dbg!(&g);
+                eprintln!("{}", g.unwrap_err());
+                panic!("`corrupt_gpt_test` unexpected error");
+            }
+        }
+    }
+
+    /// Ensure that [`Gpt::from_reader`] properly fails if there is no
+    /// primary or backup Gpt.
+    #[test]
+    #[should_panic]
+    fn missing_gpt_test() {
+        let data = Cursor::new(vec![0; TEN_MIB_BYTES]);
+        let _gpt = Gpt::from_reader(data, BlockSize(512)).unwrap();
     }
 }
