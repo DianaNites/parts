@@ -1381,11 +1381,7 @@ mod tests {
             .start(ByteSize::from_mib(1) / BLOCK_SIZE)
             .part_type(Uuid::parse_str(LINUX_PART_GUID).unwrap())
             .finish();
-        let dup_part = GptPartBuilder::new(BLOCK_SIZE)
-            .size(ByteSize::from_mib(8))
-            .start(ByteSize::from_mib(1) / BLOCK_SIZE)
-            .part_type(Uuid::parse_str(LINUX_PART_GUID).unwrap())
-            .finish();
+        let dup_part = part.clone();
         gpt.add_partition(part);
         gpt.add_partition(dup_part);
     }
