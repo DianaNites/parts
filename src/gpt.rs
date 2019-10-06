@@ -336,7 +336,7 @@ impl GptHeader {
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Hash, PartialOrd, Ord)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Hash, PartialOrd, Ord)]
 #[repr(C)]
 pub struct GptPart {
     /// Defines the type of this partition
@@ -359,6 +359,19 @@ pub struct GptPart {
 
     /// Null-terminated name, UCS-2/UTF-16LE string,
     name: GenericArray<u16, U36>,
+}
+
+impl fmt::Debug for GptPart {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_struct("GptPart")
+            .field("partition_type_guid", &self.partition_type_guid)
+            .field("partition_guid", &self.partition_guid)
+            .field("starting_lba", &self.starting_lba)
+            .field("ending_lba", &self.ending_lba)
+            .field("attributes", &self.attributes)
+            .field("name", &self.name())
+            .finish()
+    }
 }
 
 impl GptPart {
