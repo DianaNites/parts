@@ -395,7 +395,9 @@ impl GptPart {
     pub fn end(&self) -> LogicalBlockAddress {
         self.ending_lba
     }
+}
 
+impl GptPart {
     /// Reads a GPT Partition from a [`Read`]er.
     ///
     /// This will advance the [`Read`]er by the size of a single partition entry.
