@@ -39,6 +39,9 @@ pub enum GptError {
     /// File from [`Gpt::from_file`] wasn't a block device.
     NotBlock,
 
+    /// The size of the device is not what the GPT Header expects.
+    InvalidSize,
+
     /// The GPT is corrupt, but can be repaired.
     CorruptGpt(Gpt, Box<dyn Error>),
 }
@@ -75,6 +78,10 @@ impl fmt::Display for GptError {
                 write!(f, "GPT is corrupt, but can be repaired.\nCause: {}", e)
             }
             Self::NotBlock => write!(f, "Not a block device"),
+            Self::InvalidSize => write!(
+                f,
+                "The size of the device is not what the GPT Header expects"
+            ),
         }
     }
 }
@@ -910,6 +917,10 @@ impl Gpt {
     /// # Errors
     ///
     /// - If IO does.
+    /// - If `dest` is a different size than expected.
+    /// GPT requires that the last logical block address be
+    /// the backup GPT Header. If `dest` has grown larger, both headers
+    /// will need updating.
     ///
     /// # Panics
     ///
@@ -934,6 +945,16 @@ impl Gpt {
     pub fn to_writer<W: Write + Seek>(&self, mut dest: W) -> Result<()> {
         let header = self.header.as_ref().unwrap();
         let backup = self.backup.as_ref().unwrap();
+        //
+        let disk_size = {
+            let cur = dest.seek(SeekFrom::Current(0))?;
+            let end = dest.seek(SeekFrom::End(0))?;
+            dest.seek(SeekFrom::Start(cur))?;
+            ByteSize::from_bytes(end)
+        };
+        if disk_size != self.disk_size {
+            return Err(GptError::InvalidSize);
+        }
         //
         self.mbr.to_writer(&mut dest, self.block_size)?;
 
