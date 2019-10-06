@@ -36,9 +36,6 @@ pub enum GptError {
     /// The [`BlockSize`] was invalid.
     InvalidBlockSize,
 
-    /// File from [`Gpt::from_file`] wasn't a block device.
-    NotBlock,
-
     /// The size of the device is not what the GPT Header expects.
     InvalidSize,
 
@@ -77,7 +74,6 @@ impl fmt::Display for GptError {
             Self::CorruptGpt(_, e) => {
                 write!(f, "GPT is corrupt, but can be repaired.\nCause: {}", e)
             }
-            Self::NotBlock => write!(f, "Not a block device"),
             Self::InvalidSize => write!(
                 f,
                 "The size of the device is not what the GPT Header expects"
@@ -851,49 +847,6 @@ impl Gpt {
                 e.into(),
             )),
         }
-    }
-
-    /// Read a GPT Label from an existing file
-    ///
-    /// On Linux this will use the `BLKSSZGET` `ioctl` to get the logical
-    /// block size, and `BLKGETSIZE64` to get the byte size.
-    ///
-    /// ## Errors
-    ///
-    /// - See [`Gpt::from_reader`] for details.
-    ///
-    /// ## Panics
-    ///
-    /// - If the file is not a block device.
-    /// - If the `ioctl` fails.
-    /// - For any reason [`Gpt::from_reader`] would panic.
-    ///
-    /// ## Platform Support
-    ///
-    /// This method only supports Linux, because `ioctl` is Linux-specific.
-    /// On windows you'll have to specify the block size yourself.
-    #[cfg(any(target_os = "linux", all(feature = "nightly", rustdoc)))]
-    #[cfg_attr(all(feature = "nightly", rustdoc), doc(cfg(target_os = "linux")))]
-    pub fn from_file(file: std::fs::File) -> Result<Self> {
-        use std::os::unix::prelude::*;
-        //
-        mod ioctl {
-            use nix::libc::c_int;
-            use nix::*;
-            ioctl_read_bad!(block_size_get, 0x1268, c_int);
-        }
-        //
-        if !file.metadata()?.file_type().is_block_device() {
-            return Err(GptError::NotBlock);
-        }
-        //
-        let fd = file.as_raw_fd();
-        let mut block_size = 0;
-        unsafe {
-            ioctl::block_size_get(fd, &mut block_size).unwrap();
-        };
-        //
-        Self::from_reader(file, BlockSize(block_size as u64))
     }
 
     /// Set the disk GUID.
