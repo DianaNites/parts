@@ -22,8 +22,6 @@ impl fmt::Display for ErrorString {
 }
 
 /// Gpt Error type.
-///
-/// This type is opaque because
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum GptError {
@@ -115,7 +113,7 @@ const MIN_PARTITIONS_BYTES: u64 = 16384;
 
 /// Check the validity of a GPT Header
 ///
-/// ## Arguments
+/// # Arguments
 ///
 /// - `header`, the GptHeader to validate. Despite being `&mut`,
 ///     this won't be visibly modified.
@@ -123,12 +121,12 @@ const MIN_PARTITIONS_BYTES: u64 = 16384;
 ///     The position of this is expected to be directly after the GPT Header.
 /// - `block_size`, devices block size.
 ///
-/// ## Errors
+/// # Errors
 ///
 /// - If the header is invalid
 /// - If calculating the CRC fails.
 ///
-/// ## Details
+/// # Details
 ///
 /// - Verifies the Signature is "EFI PART".
 /// - Verifies the Header CRC is correct.
@@ -181,7 +179,7 @@ fn check_validity<RS: Read + Seek>(
 ///
 /// [`GptHeader::header_crc32`] MUST be zero for this to be correct.
 ///
-/// ## Errors
+/// # Errors
 ///
 /// - If bincode does.
 fn calculate_crc(header: &GptHeader) -> u32 {
@@ -455,7 +453,7 @@ impl GptPart {
 
 /// Builder struct for Gpt Partitions.
 ///
-/// ## Example
+/// # Examples
 ///
 /// See [parts](./index.html)
 #[derive(Debug, PartialEq)]
@@ -476,7 +474,7 @@ pub struct GptPartBuilder {
 impl GptPartBuilder {
     /// Create a new Gpt Partition.
     ///
-    /// ## Example
+    /// # Examples
     ///
     /// See [`GptPartBuilder`]
     pub fn new(block_size: BlockSize) -> Self {
@@ -520,7 +518,7 @@ impl GptPartBuilder {
 
     /// Size of the partition, according to [`ByteSize`]
     ///
-    /// ## Note
+    /// # Notes
     ///
     /// Partitions can only be represented in logical block addresses,
     /// so this size should be divisible by the device block size.
@@ -539,7 +537,7 @@ impl GptPartBuilder {
     /// The ending address will be automatically calculated from
     /// the size of the partition and the starting point specified here.
     ///
-    /// ## Examples
+    /// # Examples
     ///
     /// Align at a 1MiB boundary
     ///
@@ -559,7 +557,7 @@ impl GptPartBuilder {
 
     /// Set the partition GUID.
     ///
-    /// ## Safety
+    /// # Safety
     ///
     /// This is unsafe because GPT Partition GUID's are supposed to be unique.
     ///
@@ -638,7 +636,7 @@ impl Gpt {
     ///
     /// This creates a valid, but empty, Gpt Label.
     ///
-    /// ## Examples
+    /// # Examples
     ///
     /// Create a new Gpt Table and add a partition.
     ///
@@ -656,7 +654,7 @@ impl Gpt {
     /// gpt.add_partition(part);
     /// ```
     ///
-    /// ## Panics
+    /// # Panics
     ///
     /// - If `disk_size` isn't large enough.
     ///
@@ -715,11 +713,11 @@ impl Gpt {
 
     /// Read from an existing GPT Disk or image.
     ///
-    /// ## Arguments
+    /// # Arguments
     ///
     /// - `block_size` is the devices logical block size. ex: 512, 4096
     ///
-    /// ## Examples
+    /// # Examples
     ///
     /// Read from an in-memory representation.
     ///
@@ -733,13 +731,13 @@ impl Gpt {
     /// let gpt = Gpt::from_reader(&mut data, BLOCK_SIZE);
     /// ```
     ///
-    /// ## Errors
+    /// # Errors
     ///
     /// - If IO fails.
     /// - If the Protective MBR is invalid.
     /// - If the primary and/or backup GPT is invalid.
     ///
-    /// ### Invalid GPT Headers
+    /// ## Invalid GPT Headers
     ///
     /// In this case the [`Err`] variant will contain a [`Gpt`] Instance,
     /// which should be repaired after asking permission from the user.
@@ -851,7 +849,7 @@ impl Gpt {
 
     /// Set the disk GUID.
     ///
-    /// ## Safety
+    /// # Safety
     ///
     /// This is unsafe because GPT Disk GUID's are supposed to be unique.
     ///
@@ -878,7 +876,7 @@ impl Gpt {
     ///
     /// - If this [`Gpt`] instance is corrupt.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```rust
     /// # use parts::Gpt;
@@ -990,11 +988,11 @@ impl Gpt {
 
     /// Adds a new partition
     ///
-    /// ## Example
+    /// # Examples
     ///
     /// See [`Gpt::new`]
     ///
-    /// ## Panics
+    /// # Panics
     ///
     /// - If the [`GptPart`] doesn't fit
     /// within the first/last usable logical block addresses.

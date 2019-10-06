@@ -74,9 +74,7 @@ pub(crate) struct ProtectiveMbr {
 impl ProtectiveMbr {
     /// Creates a new Protective MBR
     ///
-    /// ## Arguments
-    ///
-    /// - `last_lba`, the last usable logical block address on the device.
+    /// `last_lba`, the last usable logical block address on the device.
     pub(crate) fn new(last_lba: LogicalBlockAddress) -> Self {
         Self {
             boot_code: GenericArray::default(),
@@ -110,12 +108,12 @@ impl ProtectiveMbr {
 
     /// Create a `ProtectiveMbr` from a `Read`er.
     ///
-    /// ## Errors
+    /// # Errors
     ///
     /// - If the `Read`er errors.
     /// - If the MBR is invalid.
     ///
-    /// ## Details
+    /// # Details
     ///
     /// On success, this will have read exactly `block_size` bytes from the `Read`er.
     ///
@@ -133,9 +131,9 @@ impl ProtectiveMbr {
 
     /// Write a GPT Protective MBR to a `Write`er.
     ///
-    /// ## Errors
+    /// # Errors
     ///
-    /// ## Details
+    /// # Details
     ///
     /// On success, this will have written exactly `block_size` bytes.
     ///
@@ -146,7 +144,6 @@ impl ProtectiveMbr {
         block_size: BlockSize,
     ) -> Result<()> {
         bincode::serialize_into(&mut dest, self)?;
-        //.context(Parse)?;
         // Account for reserved space.
         let len = (block_size.0 - 512) as usize;
         dest.write_all(&vec![0; len])?;
@@ -155,7 +152,7 @@ impl ProtectiveMbr {
 
     /// Validate the Protective MBR.
     ///
-    /// ## Details
+    /// # Details
     ///
     /// - Ensures the signature is correct.
     /// - Ensures there are no other partitions.
