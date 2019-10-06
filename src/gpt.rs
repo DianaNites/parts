@@ -690,21 +690,6 @@ impl Gpt {
         }
     }
 
-    /// Set the disk GUID.
-    ///
-    /// ## Safety
-    ///
-    /// This is unsafe because GPT Disk GUID's are supposed to be unique.
-    ///
-    /// Having two disks with the same GUID is a violation of the spec.
-    pub unsafe fn set_disk_guid(&mut self, new_guid: Uuid) {
-        let new_guid = uuid_hack(new_guid);
-        //
-        self.header.as_mut().unwrap().disk_guid = new_guid;
-        self.backup.as_mut().unwrap().disk_guid = new_guid;
-        self.recalculate_crc();
-    }
-
     /// Read from an existing GPT Disk or image.
     ///
     /// Note that it is statically impossible for this to modify the underlying device.
@@ -863,52 +848,19 @@ impl Gpt {
         unimplemented!()
     }
 
-    /// Repair an invalid GPT instance.
+    /// Set the disk GUID.
     ///
-    /// An invalid GPT instance is one with a corrupt or missing
-    /// backup or primary label.
+    /// ## Safety
     ///
-    /// Repairing such an instance involves duplicating the existing label
-    /// and replacing the corrupt area.
+    /// This is unsafe because GPT Disk GUID's are supposed to be unique.
     ///
-    /// Only call this method with permission from the user.
-    ///
-    /// # Examples
-    ///
-    /// Pseudo-code showing how to repair a corrupt [`Gpt`]
-    ///
-    /// ```rust,compile_fail
-    /// let corrupt_gpt = Gpt::from_reader(Cursor::new(&mut corrupted_buf), BLOCK_SIZE);
-    /// match corrupt_gpt {
-    ///     Err(GptError::CorruptGpt(mut gpt, _)) => {
-    ///         assert_eq!(gpt.header, None);
-    ///         assert_eq!(gpt.backup, Some(_));
-    ///         gpt.repair();
-    ///         assert_eq!(gpt.header, uncorrupted_gpt.header);
-    ///     }
-    /// }
-    /// ```
-    pub fn repair(&mut self) {
-        if self.header.is_none() || self.backup.is_none() {
-            let last_lba = (self.disk_size / self.block_size) - 1;
-            if let Some(header) = &self.header {
-                let mut backup = header.clone();
-                backup.this_lba = last_lba;
-                backup.alt_lba = 1.into();
-                backup.partition_array_start = header.last_usable_lba + 1;
-                backup.header_crc32 = 0;
-                backup.header_crc32 = calculate_crc(&backup);
-                self.backup = Some(backup);
-            } else if let Some(backup) = &self.backup {
-                let mut header = backup.clone();
-                header.this_lba = 1.into();
-                header.alt_lba = last_lba;
-                header.partition_array_start = 2.into();
-                header.header_crc32 = 0;
-                header.header_crc32 = calculate_crc(&header);
-                self.header = Some(header);
-            }
-        }
+    /// Having two disks with the same GUID is a violation of the spec.
+    pub unsafe fn set_disk_guid(&mut self, new_guid: Uuid) {
+        let new_guid = uuid_hack(new_guid);
+        //
+        self.header.as_mut().unwrap().disk_guid = new_guid;
+        self.backup.as_mut().unwrap().disk_guid = new_guid;
+        self.recalculate_crc();
     }
 
     /// Write the GPT structure to a [`Write`]r.
@@ -966,6 +918,54 @@ impl Gpt {
 
         //
         Ok(())
+    }
+
+    /// Repair an invalid GPT instance.
+    ///
+    /// An invalid GPT instance is one with a corrupt or missing
+    /// backup or primary label.
+    ///
+    /// Repairing such an instance involves duplicating the existing label
+    /// and replacing the corrupt area.
+    ///
+    /// Only call this method with permission from the user.
+    ///
+    /// # Examples
+    ///
+    /// Pseudo-code showing how to repair a corrupt [`Gpt`]
+    ///
+    /// ```rust,compile_fail
+    /// let corrupt_gpt = Gpt::from_reader(Cursor::new(&mut corrupted_buf), BLOCK_SIZE);
+    /// match corrupt_gpt {
+    ///     Err(GptError::CorruptGpt(mut gpt, _)) => {
+    ///         assert_eq!(gpt.header, None);
+    ///         assert_eq!(gpt.backup, Some(_));
+    ///         gpt.repair();
+    ///         assert_eq!(gpt.header, uncorrupted_gpt.header);
+    ///     }
+    /// }
+    /// ```
+    pub fn repair(&mut self) {
+        if self.header.is_none() || self.backup.is_none() {
+            let last_lba = (self.disk_size / self.block_size) - 1;
+            if let Some(header) = &self.header {
+                let mut backup = header.clone();
+                backup.this_lba = last_lba;
+                backup.alt_lba = 1.into();
+                backup.partition_array_start = header.last_usable_lba + 1;
+                backup.header_crc32 = 0;
+                backup.header_crc32 = calculate_crc(&backup);
+                self.backup = Some(backup);
+            } else if let Some(backup) = &self.backup {
+                let mut header = backup.clone();
+                header.this_lba = 1.into();
+                header.alt_lba = last_lba;
+                header.partition_array_start = 2.into();
+                header.header_crc32 = 0;
+                header.header_crc32 = calculate_crc(&header);
+                self.header = Some(header);
+            }
+        }
     }
 
     /// Iterator of the available partitions.
