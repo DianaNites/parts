@@ -36,43 +36,68 @@ pub enum PartitionType {
     LinuxSwap,
 }
 
+// Helps macro
+#[allow(non_upper_case_globals)]
 mod types {
-    pub const UNUSED: &str = "00000000-0000-0000-0000-000000000000";
-    pub const MBR: &str = "024DEE41-33E7-11D3-9D69-0008C781F39F";
-    pub const EFI: &str = "C12A7328-F81F-11D2-BA4B-00A0C93EC93B";
-    pub const MS_RESERVED: &str = "E3C9E316-0B5C-4DB8-817D-F92DF00215AE";
-    pub const MS_BASIC: &str = "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7";
-    pub const LINUX_DATA: &str = "0FC63DAF-8483-4772-8E79-3D69D8477DE4";
-    pub const LINUX_SWAP: &str = "0657FD6D-A4AB-43C4-84E5-0933C84B4F4F";
+    pub const Unused: &str = "00000000-0000-0000-0000-000000000000";
+    pub const LegacyMbr: &str = "024DEE41-33E7-11D3-9D69-0008C781F39F";
+    pub const EfiSystem: &str = "C12A7328-F81F-11D2-BA4B-00A0C93EC93B";
+    pub const MicrosoftReserved: &str = "E3C9E316-0B5C-4DB8-817D-F92DF00215AE";
+    pub const MicrosoftBasicData: &str = "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7";
+    pub const LinuxFilesystemData: &str = "0FC63DAF-8483-4772-8E79-3D69D8477DE4";
+    pub const LinuxSwap: &str = "0657FD6D-A4AB-43C4-84E5-0933C84B4F4F";
 }
 use types::*;
 
-impl PartitionType {
-    pub(crate) fn to_uuid(&self) -> Uuid {
-        match self {
+macro_rules! __to_uuid_match {
+    ($self:ident, $($i:ident),+) => {
+        match $self {
             PartitionType::Unused => Uuid::nil(),
             PartitionType::Unknown => Uuid::nil(),
-            PartitionType::LegacyMbr => Uuid::parse_str(MBR).unwrap(),
-            PartitionType::EfiSystem => Uuid::parse_str(EFI).unwrap(),
-            PartitionType::MicrosoftReserved => Uuid::parse_str(MS_RESERVED).unwrap(),
-            PartitionType::MicrosoftBasicData => Uuid::parse_str(MS_BASIC).unwrap(),
-            PartitionType::LinuxFilesystemData => Uuid::parse_str(LINUX_DATA).unwrap(),
-            PartitionType::LinuxSwap => Uuid::parse_str(LINUX_SWAP).unwrap(),
+            $(
+            PartitionType::$i => Uuid::parse_str($i).unwrap(),
+            )+
         }
+    };
+}
+
+macro_rules! __from_uuid_match {
+    ($s:ident, $($i:ident),+) => {
+        #[allow(non_upper_case_globals)]
+        match &*$s {
+            Unused => PartitionType::Unused,
+            $(
+            $i => PartitionType::$i,
+            )+
+            _ => PartitionType::Unknown,
+        }
+    };
+}
+
+impl PartitionType {
+    pub(crate) fn to_uuid(&self) -> Uuid {
+        __to_uuid_match!(
+            self,
+            LegacyMbr,
+            EfiSystem,
+            MicrosoftReserved,
+            MicrosoftBasicData,
+            LinuxFilesystemData,
+            LinuxSwap
+        )
     }
 
     pub(crate) fn from_uuid(uuid: Uuid) -> Self {
         let mut buf = Uuid::encode_buffer();
         let s = uuid.to_hyphenated().encode_upper(&mut buf);
-        match &*s {
-            UNUSED => PartitionType::Unused,
-            MBR => PartitionType::LegacyMbr,
-            EFI => PartitionType::EfiSystem,
-            MS_RESERVED => PartitionType::MicrosoftReserved,
-            MS_BASIC => PartitionType::MicrosoftBasicData,
-            LINUX_DATA => PartitionType::LinuxFilesystemData,
-            LINUX_SWAP => PartitionType::LinuxSwap,
-            _ => PartitionType::Unknown,
-        }
+        __from_uuid_match!(
+            s,
+            LegacyMbr,
+            EfiSystem,
+            MicrosoftReserved,
+            MicrosoftBasicData,
+            LinuxFilesystemData,
+            LinuxSwap
+        )
     }
 }
