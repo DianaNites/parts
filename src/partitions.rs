@@ -6,8 +6,8 @@ use uuid::Uuid;
 /// This is non-exhaustive,
 /// it's unrecommended to match on this.
 ///
-/// Types that match against the [`PartitionType::Unknown`] variant
-/// are not guaranteed to continue to do so, as more partition types
+/// A UUID that matches against the [`PartitionType::Unknown`] variant
+/// is not guaranteed to continue to do so, as more partition types
 /// become recognized.
 #[derive(Debug, Copy, Clone)]
 pub enum PartitionType {
