@@ -140,10 +140,10 @@ fn check_validity<RS: Read + Seek>(
     mut source: RS,
     block_size: BlockSize,
 ) -> Result<()> {
-    if header.signature != EFI_PART && header.header_size <= 92 {
+    if header.signature != EFI_PART {
         return Err(GptError::INVALID_SIGNATURE.into());
     };
-    if u64::from(header.header_size) >= block_size.0 {
+    if header.header_size < 92 || u64::from(header.header_size) >= block_size.0 {
         return Err(GptError::INVALID_HEADER_SIZE.into());
     };
     // FIXME: This one shouldn't be a requirement.
@@ -165,6 +165,7 @@ fn check_validity<RS: Read + Seek>(
     source.seek(SeekFrom::Start(
         (header.partition_array_start * block_size).as_bytes(),
     ))?;
+    // FIXME: Should probably bound memory usage here.
     let mut buf: Vec<u8> = Vec::with_capacity((header.partitions * header.partition_size) as usize);
     buf.resize(buf.capacity(), 0);
     source.read_exact(&mut buf)?;
