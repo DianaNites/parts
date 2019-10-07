@@ -65,7 +65,7 @@ impl PartitionType {
         let mut buf = Uuid::encode_buffer();
         let s = uuid.to_hyphenated().encode_upper(&mut buf);
         match &*s {
-            UNUSED => PartitionType::LinuxFilesystemData,
+            UNUSED => PartitionType::Unused,
             MBR => PartitionType::LegacyMbr,
             EFI => PartitionType::EfiSystem,
             MS_RESERVED => PartitionType::MicrosoftReserved,
