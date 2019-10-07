@@ -2,7 +2,7 @@
 use crate::mbr::*;
 use crate::partitions::*;
 use crate::types::*;
-use crc::crc32;
+use crc::{crc32, Hasher32};
 use generic_array::{typenum::U36, GenericArray};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -165,11 +165,17 @@ fn check_validity<RS: Read + Seek>(
     source.seek(SeekFrom::Start(
         (header.partition_array_start * block_size).as_bytes(),
     ))?;
-    // FIXME: Should probably bound memory usage here.
-    let mut buf: Vec<u8> = Vec::with_capacity((header.partitions * header.partition_size) as usize);
-    buf.resize(buf.capacity(), 0);
-    source.read_exact(&mut buf)?;
-    let crc = crc32::checksum_ieee(&buf);
+    let mut buf = [0u8; 128];
+    //
+    let mut digest = crc32::Digest::new(crc32::IEEE);
+    for _ in 0..header.partitions {
+        let times = header.partition_size / 128;
+        for _ in 0..times {
+            source.read_exact(&mut buf)?;
+            digest.write(&buf);
+        }
+    }
+    let crc = digest.sum32();
     if crc != header.partitions_crc32 {
         return Err(GptError::INVALID_PART_CHECKSUM.into());
     }
