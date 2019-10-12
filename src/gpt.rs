@@ -209,6 +209,7 @@ fn calculate_crc(header: &GptHeader) -> u32 {
 /// This is an ugly hack.
 // FIXME: An ugly hack for Uuid
 // TODO: Just use a [u8; 16]?
+// TODO: Add proper tests for this. Currently only `create_test_parts` fails.
 fn uuid_hack(uuid: Uuid) -> Uuid {
     let (mut a, mut b, mut c, d) = uuid.as_fields();
     // `Uuid` gives them to us as big-endian, which Rust will interpret as little,
@@ -424,7 +425,7 @@ impl GptPart {
     /// Creating aligned partitions
     ///
     /// ```rust
-    /// # use parts::{partitions::*, types::*, Gpt, GptPartBuilder};
+    /// # use parts::{types::*, Gpt, GptPartBuilder};
     /// let block_size = BlockSize(512);
     /// let image_size = ByteSize::from_mib(30);
     /// //
@@ -500,6 +501,8 @@ impl GptPart {
 /// # Examples
 ///
 /// See [parts](./index.html)
+///
+/// See method documentation
 #[derive(Debug)]
 pub struct GptPartBuilder {
     partition_type_guid: Uuid,
@@ -583,14 +586,16 @@ impl GptPartBuilder {
     ///
     /// # Examples
     ///
-    /// Align at a 1MiB boundary
+    /// Align at a 1MiB boundary.
+    /// Note that this will only work if [`GptPartBuilder::size`] is
+    /// a multiple of 1MiB.
     ///
     /// ```rust
     /// # use parts::*;
     /// # use parts::types::*;
-    ///
     /// let block_size = BlockSize(512);
     /// let part = GptPartBuilder::new(block_size)
+    ///     .size(ByteSize::from_mib(1))
     ///     .start(ByteSize::from_mib(1) / block_size)
     ///     .finish();
     /// ```
