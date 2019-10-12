@@ -9,7 +9,7 @@ use uuid::Uuid;
 /// A UUID that matches against the [`PartitionType::Unknown`] variant
 /// is not guaranteed to continue to do so, as more partition types
 /// become recognized.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PartitionType {
     /// Unused entry
     Unused,
