@@ -416,6 +416,34 @@ impl GptPart {
     /// The ending logical block address for the partition.
     ///
     /// Note that this is inclusive.
+    ///
+    /// # Examples
+    ///
+    /// Creating aligned partitions
+    ///
+    /// ```rust
+    /// # use parts::{partitions::*, types::*, Gpt, GptPartBuilder};
+    /// let block_size = BlockSize(512);
+    /// let image_size = ByteSize::from_mib(30);
+    /// //
+    /// let mut gpt = Gpt::new(block_size, image_size);
+    /// let mib_aligned = ByteSize::from_mib(1) / block_size;
+    ///
+    /// let first_part = GptPartBuilder::new(block_size)
+    ///     .name("First")
+    ///     .size(ByteSize::from_mib(10))
+    ///     .start(mib_aligned)
+    ///     .finish();
+    ///
+    /// let second_part = GptPartBuilder::new(block_size)
+    ///     .name("Second")
+    ///     .size(ByteSize::from_mib(10))
+    ///     .start(first_part.end() + 1) // This will also be 1MiB aligned!
+    ///     .finish();
+    ///
+    /// gpt.add_partition(first_part);
+    /// gpt.add_partition(second_part);
+    /// ```
     pub fn end(&self) -> LogicalBlockAddress {
         self.ending_lba
     }
