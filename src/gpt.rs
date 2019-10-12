@@ -224,7 +224,7 @@ fn uuid_hack(uuid: Uuid) -> Uuid {
 }
 
 /// The GPT Header Structure
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Hash, PartialOrd, Ord)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[repr(C)]
 struct GptHeader {
     /// Hard-coded to "EFI PART",
@@ -349,7 +349,9 @@ impl GptHeader {
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Hash, PartialOrd, Ord)]
+#[derive(Serialize, Deserialize)]
+// This type is not safe to clone, but tests need it.
+#[cfg_attr(test, derive(Clone, PartialEq))]
 #[repr(C)]
 pub struct GptPart {
     /// Defines the type of this partition
@@ -498,7 +500,7 @@ impl GptPart {
 /// # Examples
 ///
 /// See [parts](./index.html)
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct GptPartBuilder {
     partition_type_guid: Uuid,
 
@@ -656,7 +658,9 @@ impl GptPartBuilder {
 ///
 /// Using such an instance without repairing it may cause certain methods to panic.
 /// The only method safe to use is [`Gpt::repair`].
-#[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, Ord)]
+#[derive(Debug)]
+// Comparing this doesn't make sense except in tests.
+#[cfg_attr(test, derive(PartialEq))]
 pub struct Gpt {
     mbr: ProtectiveMbr,
 
