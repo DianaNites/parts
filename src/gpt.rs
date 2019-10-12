@@ -1136,6 +1136,40 @@ impl Gpt {
         backup.this_lba = last_lba;
         self.recalculate_crc();
     }
+
+    /// Returns the remaining size on disk for a partition starting at
+    /// the `start` [`LogicalBlockAddress`].
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use parts::*;
+    /// # use parts::types::*;
+    /// # let block_size = BlockSize(512);
+    /// let image_size = ByteSize::from_mib(100);
+    ///
+    /// let gpt = Gpt::new(block_size, image_size);
+    /// let first_part = GptPartBuilder::new(block_size)
+    ///     .name("First")
+    ///     .size(ByteSize::from_mib(1))
+    ///     .start(ByteSize::from_mib(1) / block_size)
+    ///     .finish();
+    /// let remaining_part = GptPartBuilder::new(block_size)
+    ///     .name("Remaining")
+    ///     .size(gpt.remaining(first_part.end() + 1))
+    ///     .start(first_part.end() + 1)
+    ///     .finish();
+    /// let part_size = ((remaining_part.end() - remaining_part.start()) + 1) * block_size;
+    ///
+    /// // 1MiB for padding, then 1MiB for `first_part`,
+    /// // and then 17 * 2(34KiB) for the GPT headers.
+    /// let expected_remaining = ByteSize::from_mib(98) - (ByteSize::from_kib(17) * 2);
+    ///
+    /// assert_eq!(part_size, expected_remaining)
+    /// ```
+    pub fn remaining(&self, start: LogicalBlockAddress) -> ByteSize {
+        ((self.last_usable_address() - self.first_usable_address()) - start) * self.block_size
+    }
 }
 
 impl Gpt {
