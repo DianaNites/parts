@@ -49,16 +49,16 @@ macro_rules! __ByteSizeImplAs {
 ///
 /// # Usage
 ///
-/// ```rust
+/// ```rust,compile_fail
 /// # use parts::types::*;
 /// let block = BlockSize(512);
 /// assert_eq!(block * 2, BlockSize(1024));
 /// assert_eq!(block / 2, BlockSize(256));
+///
 /// // Doesn't compile, adding/subtracting
 /// // arbitrary numbers from blocks isn't valid.
-///
-/// // assert_eq!(block + 2, 514);
-/// // assert_eq!(block - 2, 510);
+/// assert_eq!(block + 2, 514);
+/// assert_eq!(block - 2, 510);
 /// ```
 #[derive(
     Debug,
@@ -102,7 +102,7 @@ pub struct BlockSize(pub u64);
 ///
 /// println!("Mebibytes: {}", mib.as_mib());
 /// println!("Bytes: {}", mib.as_bytes());
-/// println!("ByteSize: {}", mib);
+/// println!("ByteSize: {}", mib); // Displays as bytes.
 /// ```
 #[derive(
     Debug,
@@ -151,6 +151,10 @@ impl ByteSize {
 
 /// Represents a Logical Block Address.
 ///
+/// This is used by GPT/EFI to locate areas on a device.
+/// Addressing is in blocks of [`BlockSize`].
+/// This is the smallest unit a GPT label can address.
+///
 /// This type always has the same representation as a [`u64`]
 ///
 /// # Examples
@@ -162,7 +166,7 @@ impl ByteSize {
 /// let disk_size = ByteSize::from_mib(10);
 /// let block_size = BlockSize(512);
 ///
-/// let last_lba = LogicalBlockAddress(disk_size.as_bytes() / block_size.0);
+/// let last_lba = disk_size / block_size;
 /// println!("The last Logical Block Address is: {}", last_lba);
 /// ```
 #[derive(
