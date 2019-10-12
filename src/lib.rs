@@ -42,8 +42,9 @@
 #![cfg_attr(feature = "nightly", feature(doc_cfg))]
 mod gpt;
 mod mbr;
-pub mod partitions;
+mod partitions;
 pub mod types;
 
 pub use gpt::*;
+pub use partitions::*;
 pub use uuid;
