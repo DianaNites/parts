@@ -490,6 +490,11 @@ impl GptPart {
 
 /// Builder struct for Gpt Partitions.
 ///
+/// # Notes
+///
+/// If you do not specify [`GptPartBuilder::size`],
+/// it will be rounded to the `block_size`, which is the minimum possible size.
+///
 /// # Examples
 ///
 /// See [parts](./index.html)
@@ -612,7 +617,10 @@ impl GptPartBuilder {
     }
 
     /// Finalize the Gpt Partition.
-    pub fn finish(self) -> GptPart {
+    pub fn finish(mut self) -> GptPart {
+        if self.size.as_bytes() == 0 {
+            self.size = self.block_size.into();
+        }
         GptPart {
             partition_type_guid: self.partition_type_guid,
             partition_guid: self.partition_guid,
@@ -1409,5 +1417,21 @@ mod tests {
         let dup_part = part.clone();
         gpt.add_partition(part);
         gpt.add_partition(dup_part);
+    }
+
+    /// Ensure that [`GptPartBuilder::finish`] doesn't create an invalid
+    /// partition if [`GptPartBuilder::size`] isn't called.
+    ///
+    /// Previously it would generate a partition ending before it started
+    ///
+    /// The minimum size is now `block_size`
+    #[test]
+    fn gpt_part_builder_minimum_size() {
+        let part = GptPartBuilder::new(BLOCK_SIZE).finish();
+        assert_eq!(
+            part.start(),
+            part.end(),
+            "GptPartBuilder invalid minimum size"
+        );
     }
 }
