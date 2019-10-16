@@ -3,6 +3,8 @@ name = "parts"
 version = "0.1.0"
 authors = ["Diana"]
 edition = "2018"
+#
+publish = false
 
 [dependencies]
 uuid = { version = "0.7.4", features = ["v4", "serde"] }
