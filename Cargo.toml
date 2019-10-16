@@ -5,6 +5,7 @@ authors = ["Diana"]
 edition = "2018"
 #
 publish = false
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 uuid = { version = "0.7.4", features = ["v4", "serde"] }
