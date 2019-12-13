@@ -8,15 +8,15 @@ publish = false
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-uuid = { version = "0.7.4", features = ["v4", "serde"] }
-serde = { version = "1.0.101", features = ["derive"] }
-bincode = "1.2.0"
+uuid = { version = "0.8.1", features = ["v4", "serde"] }
+serde = { version = "1.0.103", features = ["derive"] }
+bincode = "1.2.1"
 crc = "1.8.1"
 generic-array = { version = "0.13.2", features = ["serde"] }
-derive_more = "0.15.0"
+derive_more = "0.99.2"
 
 [dev-dependencies]
-static_assertions = "1.0.0"
+static_assertions = "1.1.0"
 prettydiff = "0.3.1"
 
 [target.'cfg(fuzzing)'.dependencies]
