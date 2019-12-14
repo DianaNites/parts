@@ -1,4 +1,4 @@
-//! Types for use in [`Gpt`]
+//! Types for use in [`crate::Gpt`]
 use derive_more::*;
 use serde::{Deserialize, Serialize};
 
