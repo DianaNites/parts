@@ -684,6 +684,7 @@ pub struct Gpt {
     disk_size: ByteSize,
 }
 
+/// Public
 impl Gpt {
     /// Create a new GPT label,
     /// assuming a size of `disk_size` and a block size of `block_size`
@@ -1172,6 +1173,7 @@ impl Gpt {
     }
 }
 
+/// Private
 impl Gpt {
     /// Recalculate the primary and backup header crc
     fn recalculate_crc(&mut self) {
