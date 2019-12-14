@@ -75,7 +75,7 @@ macro_rules! __from_uuid_match {
 }
 
 impl PartitionType {
-    pub(crate) fn to_uuid(&self) -> Uuid {
+    pub(crate) fn to_uuid(self) -> Uuid {
         __to_uuid_match!(
             self,
             LegacyMbr,
