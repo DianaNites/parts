@@ -1,52 +1,33 @@
 //! MBR definitions
 use crate::types::*;
+use displaydoc::Display;
 use generic_array::{typenum::U440, GenericArray};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
-use std::error::Error;
-use std::fmt;
 use std::io::{prelude::*, SeekFrom};
+use thiserror::Error;
 
-#[derive(Debug)]
+// FIXME: Not ideal but :shrug:. QuirkBrokenPartedCHS needs it?
+#[allow(clippy::large_enum_variant)]
+#[derive(Error, Debug, Display)]
 pub(crate) enum MbrError {
-    Validate(&'static str),
-    Parse(bincode::Error),
-    Io(std::io::Error),
-}
+    /// Reading or writing the MBR failed.
+    Io(#[from] std::io::Error),
 
-impl MbrError {
-    const TOO_MANY_PARTITIONS: &'static str = "Too many partitions";
-    const INVALID_SIGNATURE: &'static str = "Signature Invalid";
-}
+    /// The MBR signature is invalid. (Expected: 0x55AA-LE, got: `{0:X?}`)
+    InvalidMbrSignature([u8; 2]),
 
-impl fmt::Display for MbrError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Validate(r) => write!(f, "Protective MBR is invalid: {}", r),
-            Self::Parse(s) => write!(f, "Error parsing MBR: {}", s),
-            Self::Io(s) => write!(f, "Error reading MBR: {}", s),
-        }
-    }
-}
+    /// The MBR has more partitions than it should.
+    /// A GPT Protective MBR should only ever have one partition, with the
+    /// GPT Protective OS type.
+    InvalidPartitions,
 
-impl Error for MbrError {}
+    /// GNU Parted generates an invalid Protective MBR.
+    /// Specifically, the starting CHS and ending is invalid.
+    QuirkBrokenPartedCHS(ProtectiveMbr),
 
-impl From<bincode::Error> for MbrError {
-    fn from(e: bincode::Error) -> MbrError {
-        Self::Parse(e)
-    }
-}
-
-impl From<std::io::Error> for MbrError {
-    fn from(e: std::io::Error) -> MbrError {
-        Self::Io(e)
-    }
-}
-
-impl From<&'static str> for MbrError {
-    fn from(s: &'static str) -> MbrError {
-        Self::Validate(s)
-    }
+    /// Unknown MBR error.
+    Unknown,
 }
 
 type Result<T, E = MbrError> = std::result::Result<T, E>;
@@ -71,6 +52,7 @@ pub(crate) struct ProtectiveMbr {
     signature: [u8; 2],
 }
 
+// Crate public
 impl ProtectiveMbr {
     /// Creates a new Protective MBR
     ///
@@ -106,32 +88,40 @@ impl ProtectiveMbr {
         }
     }
 
-    /// Create a `ProtectiveMbr` from a `Read`er.
+    /// Read a `ProtectiveMbr` from a `Read`er.
     ///
     /// # Errors
     ///
     /// - If the `Read`er errors.
     /// - If the MBR is invalid.
+    /// - If an invalid MBR from GNU Parted is detected. This error is recoverable.
     ///
     /// # Details
     ///
-    /// On success, this will have read exactly `block_size` bytes from the `Read`er.
+    /// On success, this will have read exactly `block_size` bytes.
     ///
-    /// On error, the amount read is unspecified.
+    /// On [`ProtectiveMbr::validate`] errors, exactly `block_size` bytes will have been written.
+    ///
+    /// On other error, the amount read is unspecified.
     pub(crate) fn from_reader<R: Read + Seek>(
         mut source: R,
         block_size: BlockSize,
     ) -> Result<Self> {
-        let obj: Self = bincode::deserialize_from(&mut source)?;
-        obj.validate()?;
+        let obj: Self = bincode::deserialize_from(&mut source).map_err(|err| match *err {
+            bincode::ErrorKind::Io(e) => MbrError::Io(e),
+            _ => MbrError::Unknown,
+        })?;
         // Seek past the remaining block.
         source.seek(SeekFrom::Current(block_size.0 as i64 - 512))?;
-        Ok(obj)
+        //
+        obj.validate()
     }
 
     /// Write a GPT Protective MBR to a `Write`er.
     ///
     /// # Errors
+    ///
+    /// - If the `Write`r does.
     ///
     /// # Details
     ///
@@ -143,34 +133,51 @@ impl ProtectiveMbr {
         mut dest: W,
         block_size: BlockSize,
     ) -> Result<()> {
-        bincode::serialize_into(&mut dest, self)?;
+        bincode::serialize_into(&mut dest, self).map_err(|err| match *err {
+            bincode::ErrorKind::Io(e) => MbrError::Io(e),
+            _ => MbrError::Unknown,
+        })?;
         // Account for reserved space.
         let len = (block_size.0 - 512) as usize;
         dest.write_all(&vec![0; len])?;
         Ok(())
     }
+}
 
+// Private
+impl ProtectiveMbr {
     /// Validate the Protective MBR.
     ///
     /// # Details
     ///
     /// - Ensures the signature is correct.
+    /// - Ensures
     /// - Ensures there are no other partitions.
-    fn validate(&self) -> Result<()> {
-        if self.signature[0] != 0x55 || self.signature[1] != 0xAA {
-            return Err(MbrError::INVALID_SIGNATURE.into());
+    fn validate(self) -> Result<Self> {
+        if !(self.signature[0] == 0x55 && self.signature[1] == 0xAA) {
+            return Err(MbrError::InvalidMbrSignature(self.signature));
         }
-        // TODO: Validate starting CHS
-        // NOTE: parted writes an invalid MBR with an invalid CHS.
+        let part: &MbrPart = &self.partitions[0];
+        if part.os_type != 0xEE {
+            return Err(MbrError::InvalidPartitions);
+        }
+
+        // NOTE: GNU Parted Quirk.
+        // Allows an application to give a nice error to the user, and automatically fix it.
+        if !(part.start_head == 0x00 && part.start_sector == 0x02 && part.start_track == 0x00) {
+            return Err(MbrError::QuirkBrokenPartedCHS(self));
+        };
+
         for part in &self.partitions[1..] {
             if *part != MbrPart::default() {
-                return Err(MbrError::TOO_MANY_PARTITIONS.into());
+                return Err(MbrError::InvalidPartitions);
             }
         }
-        Ok(())
+        Ok(self)
     }
 }
 
+/// Smaller Debug output.
 impl std::fmt::Debug for ProtectiveMbr {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         fmt.debug_struct("ProtectiveMbr")
@@ -203,6 +210,56 @@ struct MbrPart {
     /// Hard-coded to 1, the start of the GPT Header.
     start_lba: u32,
 
-    /// Size of the disk, in LBA, minus one.
+    /// Size of the disk, in LBA, minus one. So the last *usable* LBA.
     size_lba: u32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::anyhow;
+    use anyhow::Result as AResult;
+    use static_assertions::*;
+    use std::io::Cursor;
+
+    const TEST_PARTS: &str = "tests/data/test_parts";
+    const TEST_PARTS_CF: &str = "tests/data/test_parts_cf";
+    const BLOCK_SIZE: BlockSize = BlockSize(512);
+
+    type Result = AResult<()>;
+
+    assert_eq_size!(MbrPart, [u8; 16]);
+    assert_eq_size!(ProtectiveMbr, [u8; 512]);
+
+    /// Basic reading should work and validate correctly.
+    #[test]
+    fn read_test() -> Result {
+        let mut data = Cursor::new(vec![0; BLOCK_SIZE.0 as usize]);
+        let mut file = std::fs::File::open(TEST_PARTS_CF)?;
+        file.read_exact(data.get_mut())?;
+        //
+        let _mbr = ProtectiveMbr::from_reader(data, BLOCK_SIZE)?;
+        //
+        Ok(())
+    }
+
+    /// Test that parted quirk is handled correctly
+    #[test]
+    fn read_parted_quirk_test() -> Result {
+        let mut data = Cursor::new(vec![0; BLOCK_SIZE.0 as usize]);
+        let mut file = std::fs::File::open(TEST_PARTS)?;
+        file.read_exact(data.get_mut())?;
+        //
+        let mbr = ProtectiveMbr::from_reader(data, BLOCK_SIZE);
+        match mbr {
+            Err(MbrError::QuirkBrokenPartedCHS(mbr)) => {
+                let part: &MbrPart = &mbr.partitions[0];
+                // Test the MBR errors are correct.
+                assert_eq!(part.start_sector, 0x01);
+                assert_eq!(part.end_head, 254);
+                Ok(())
+            }
+            _ => Err(anyhow!("Didn't get GNU Parted quirk")),
+        }
+    }
 }
