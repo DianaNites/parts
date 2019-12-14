@@ -47,14 +47,23 @@ macro_rules! __ByteSizeImplAs {
 ///
 /// This type always has the same representation as a [`u64`]
 ///
-/// # Usage
+/// # Examples
 ///
-/// ```rust,compile_fail
+/// Some basic math
+///
+/// ```rust
 /// # use parts::types::*;
 /// let block = BlockSize(512);
 /// assert_eq!(block * 2, BlockSize(1024));
 /// assert_eq!(block / 2, BlockSize(256));
+/// ```
 ///
+/// This doesn't compile, adding or subtracting
+/// arbitrary numbers from a BlockSize isn't valid.
+///
+/// ```rust,compile_fail
+/// # use parts::types::*;
+/// let block = BlockSize(512);
 /// // Doesn't compile, adding/subtracting
 /// // arbitrary numbers from blocks isn't valid.
 /// assert_eq!(block + 2, 514);
