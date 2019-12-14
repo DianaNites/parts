@@ -22,10 +22,6 @@ pub(crate) enum MbrError {
     /// GPT Protective OS type.
     InvalidPartitions,
 
-    /// GNU Parted generates an invalid Protective MBR.
-    /// Specifically, the starting CHS and ending is invalid.
-    QuirkBrokenPartedCHS(ProtectiveMbr),
-
     /// Unknown MBR error.
     Unknown,
 }
@@ -100,9 +96,7 @@ impl ProtectiveMbr {
     ///
     /// On success, this will have read exactly `block_size` bytes.
     ///
-    /// On [`ProtectiveMbr::validate`] errors, exactly `block_size` bytes will have been written.
-    ///
-    /// On other error, the amount read is unspecified.
+    /// On error, the amount read is unspecified.
     pub(crate) fn from_reader<R: Read + Seek>(
         mut source: R,
         block_size: BlockSize,
@@ -117,7 +111,7 @@ impl ProtectiveMbr {
         obj.validate()
     }
 
-    /// Write a GPT Protective MBR to a `Write`er.
+    /// Write a GPT Protective MBR to a `Write`r.
     ///
     /// # Errors
     ///
@@ -153,19 +147,31 @@ impl ProtectiveMbr {
     /// - Ensures the signature is correct.
     /// - Ensures
     /// - Ensures there are no other partitions.
-    fn validate(self) -> Result<Self> {
+    ///
+    /// This will also silently fix a GNU Parted bug
+    /// where the `start_sector` is 0x01 instead of 0x02,
+    /// and the `end_head` is 0xFE instead of 0xFF.
+    fn validate(mut self) -> Result<Self> {
         if !(self.signature[0] == 0x55 && self.signature[1] == 0xAA) {
             return Err(MbrError::InvalidMbrSignature(self.signature));
         }
-        let part: &MbrPart = &self.partitions[0];
+        let part: &mut MbrPart = &mut self.partitions[0];
         if part.os_type != 0xEE {
             return Err(MbrError::InvalidPartitions);
         }
 
-        // NOTE: GNU Parted Quirk.
-        // Allows an application to give a nice error to the user, and automatically fix it.
+        // NOTE: Fixes a GNU Parted bug.
+        if part.start_sector == 0x01 || part.end_head == 0xFE {
+            part.start_sector = 0x02;
+            part.end_head = 0xFF;
+        }
+
         if !(part.start_head == 0x00 && part.start_sector == 0x02 && part.start_track == 0x00) {
-            return Err(MbrError::QuirkBrokenPartedCHS(self));
+            return Err(MbrError::InvalidPartitions);
+        };
+
+        if !(part.end_head == 0xFF && part.end_sector == 0xFF && part.end_track == 0xFF) {
+            return Err(MbrError::InvalidPartitions);
         };
 
         for part in &self.partitions[1..] {
@@ -217,12 +223,10 @@ struct MbrPart {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use anyhow::anyhow;
     use anyhow::Result as AResult;
     use static_assertions::*;
     use std::io::Cursor;
 
-    const TEST_PARTS: &str = "tests/data/test_parts";
     const TEST_PARTS_CF: &str = "tests/data/test_parts_cf";
     const BLOCK_SIZE: BlockSize = BlockSize(512);
 
@@ -241,25 +245,5 @@ mod tests {
         let _mbr = ProtectiveMbr::from_reader(data, BLOCK_SIZE)?;
         //
         Ok(())
-    }
-
-    /// Test that parted quirk is handled correctly
-    #[test]
-    fn read_parted_quirk_test() -> Result {
-        let mut data = Cursor::new(vec![0; BLOCK_SIZE.0 as usize]);
-        let mut file = std::fs::File::open(TEST_PARTS)?;
-        file.read_exact(data.get_mut())?;
-        //
-        let mbr = ProtectiveMbr::from_reader(data, BLOCK_SIZE);
-        match mbr {
-            Err(MbrError::QuirkBrokenPartedCHS(mbr)) => {
-                let part: &MbrPart = &mbr.partitions[0];
-                // Test the MBR errors are correct.
-                assert_eq!(part.start_sector, 0x01);
-                assert_eq!(part.end_head, 254);
-                Ok(())
-            }
-            _ => Err(anyhow!("Didn't get GNU Parted quirk")),
-        }
     }
 }
