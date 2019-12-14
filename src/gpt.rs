@@ -1213,7 +1213,6 @@ impl Gpt {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use prettydiff::{basic::DiffOp, diff_slice};
     use static_assertions::*;
     use std::{error::Error, io::Cursor};
     use uuid::Uuid;
@@ -1337,28 +1336,19 @@ mod tests {
 
         let block_size = BLOCK_SIZE.0 as usize;
         let partition_entry_size = 128;
-        // Just directly comparing the slices would generate FAR too much output.
-        // This also highlights where the problem is, byte by byte, making debugging easier.
-        let mbr_diff = diff_slice(&data[..block_size], &src_buf[..block_size]);
-        let gpt_diff = diff_slice(
-            &data[block_size..block_size * 2],
-            &src_buf[block_size..block_size * 2],
-        );
-        let part_diff = diff_slice(
-            &data[block_size * 2..(block_size * 2) + partition_entry_size],
-            &src_buf[block_size * 2..(block_size * 2) + partition_entry_size],
-        );
-        eprintln!("MBR Diff: {}", mbr_diff);
-        eprintln!("GPT Diff: {}", gpt_diff);
-        eprintln!("Partition Diff: {}", part_diff);
+        // Not an ideal comparison, useless for debugging, but..
+        let mbr_new = &data[..block_size];
+        let mbr_old = &src_buf[..block_size];
         //
-        assert_eq!(mbr_diff.diff.len(), 1, "MBR Diff has changes");
-        assert_eq!(gpt_diff.diff.len(), 1, "GPT Diff has changes");
-        assert_eq!(part_diff.diff.len(), 1, "Partition Diff has changes");
-        match (&mbr_diff.diff[0], &gpt_diff.diff[0], &part_diff.diff[0]) {
-            (DiffOp::Equal(_), DiffOp::Equal(_), DiffOp::Equal(_)) => (),
-            (_, _, _) => panic!("Diffs are wrong"),
-        }
+        let gpt_new = &data[block_size..block_size * 2];
+        let gpt_old = &src_buf[block_size..block_size * 2];
+        //
+        let part_new = &data[block_size * 2..(block_size * 2) + partition_entry_size];
+        let part_old = &src_buf[block_size * 2..(block_size * 2) + partition_entry_size];
+        //
+        assert_eq!(mbr_new, mbr_old, "MBR is incorrect");
+        assert_eq!(gpt_new, gpt_old, "GPT is incorrect");
+        assert_eq!(part_new, part_old, "Partition is incorrect");
         Ok(())
     }
 
