@@ -22,7 +22,7 @@
 //! use parts::{Gpt, GptPartBuilder, types::*};
 //! use std::fs::File;
 //!
-//! static PATH: &str = "tests/data/test_parts";
+//! const PATH: &str = "tests/data/test_parts";
 //! // A reasonable-ish default size.
 //! const BLOCK_SIZE: BlockSize = BlockSize(512);
 //!
