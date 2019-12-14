@@ -1,4 +1,8 @@
-//! honggfuzz stuff.
+//! Honggfuzz file.
+//!
+//! Run using
+//!
+//! `cargo hfuzz run fuzz`
 
 #[cfg(fuzzing)]
 fn main() {
@@ -7,6 +11,7 @@ fn main() {
     use parts::*;
     use std::{convert::TryInto, io::Cursor};
     const BLOCK_SIZE: BlockSize = BlockSize(512);
+
     loop {
         fuzz!(|data: &[u8]| {
             let src = Cursor::new(data);
