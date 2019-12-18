@@ -201,6 +201,7 @@ struct GptHeader {
 
     /// CRC32 of the partition array
     partitions_crc32: u32,
+    // Remaining space up to the logical block size is reserved.
 }
 
 impl GptHeader {
