@@ -239,13 +239,14 @@ impl GptHeader {
     /// - If IO does
     ///
     /// The [`Read`]ers current position is undefined after this call.
-    fn from_reader<R: Read>(mut source: R) -> Result<Self> {
-        Ok(
-            bincode::deserialize_from(&mut source).map_err(|e| match *e {
+    fn from_reader<R: Read + Seek>(mut source: R, block_size: BlockSize) -> Result<Self> {
+        let obj = bincode::deserialize_from(&mut source).map_err(|e| match *e {
                 bincode::ErrorKind::Io(e) => NewGptError::Io(e),
                 _ => NewGptError::Unknown,
-            })?,
-        )
+        })?;
+        // Seek past the remaining block.
+        source.seek(SeekFrom::Current(block_size.0 as i64 - 92))?;
+        Ok(obj)
     }
 
     /// Write the GPT Header to a [`Write`]r.
