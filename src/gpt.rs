@@ -149,16 +149,7 @@ fn calculate_crc(header: &GptHeader) -> u32 {
 // TODO: Just use a [u8; 16]?
 // TODO: Add proper tests for this. Currently only `create_test_parts` fails.
 fn uuid_hack(uuid: Uuid) -> Uuid {
-    let (mut a, mut b, mut c, d) = uuid.as_fields();
-    // `Uuid` gives them to us as big-endian, which Rust will interpret as little,
-    // but they need to be little.
-    //
-    // use `swap_bytes` so that swapping doesn't depend on host endianness.
-    //
-    // `Uuid` will swap them again, so the final order is little.
-    a = a.swap_bytes();
-    b = b.swap_bytes();
-    c = c.swap_bytes();
+    let (a, b, c, d) = uuid.to_fields_le();
     Uuid::from_fields(a, b, c, d).unwrap()
 }
 
