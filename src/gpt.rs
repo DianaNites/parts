@@ -127,12 +127,14 @@ fn check_validity<RS: Read + Seek>(
 ///
 /// - If bincode does.
 fn calculate_crc(header: &GptHeader) -> u32 {
+    // This is safe because `GptHeader` is `repr(C)`
     let source_bytes = unsafe {
         std::slice::from_raw_parts(
             (header as *const _) as *const u8,
             std::mem::size_of::<GptHeader>(),
         )
     };
+    // NOTE: Only supported header size is really `92`..
     crc32::checksum_ieee(
         // `GptHeader` has extra padding at the end, but it doesn't matter.
         &source_bytes[..header.header_size as usize],
