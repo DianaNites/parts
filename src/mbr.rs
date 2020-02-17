@@ -3,8 +3,10 @@ use crate::types::*;
 use displaydoc::Display;
 use generic_array::{typenum::U440, GenericArray};
 use serde::{Deserialize, Serialize};
-use std::convert::TryFrom;
-use std::io::{prelude::*, SeekFrom};
+use std::{
+    convert::TryFrom,
+    io::{prelude::*, SeekFrom},
+};
 use thiserror::Error;
 
 // FIXME: Not ideal but :shrug:. QuirkBrokenPartedCHS needs it?
@@ -90,7 +92,8 @@ impl ProtectiveMbr {
     ///
     /// - If the `Read`er errors.
     /// - If the MBR is invalid.
-    /// - If an invalid MBR from GNU Parted is detected. This error is recoverable.
+    /// - If an invalid MBR from GNU Parted is detected. This error is
+    ///   recoverable.
     ///
     /// # Details
     ///

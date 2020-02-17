@@ -5,7 +5,8 @@
 //! The primary type for interacting the a GPT table is [`Gpt`].
 //! From here you can add and remove partitions.
 //!
-//! A Valid GPT partition consists of a MBR, and two GPT header/partition array pairs.
+//! A Valid GPT partition consists of a MBR, and two GPT header/partition array
+//! pairs.
 //!
 //! This library will not accept invalid GPT partitions,
 //! but does allow you to repair corrupt labels.

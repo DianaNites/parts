@@ -7,8 +7,7 @@
 #[cfg(fuzzing)]
 fn main() {
     use honggfuzz::*;
-    use parts::types::*;
-    use parts::*;
+    use parts::{types::*, *};
     use std::{convert::TryInto, io::Cursor};
     const BLOCK_SIZE: BlockSize = BlockSize(512);
 

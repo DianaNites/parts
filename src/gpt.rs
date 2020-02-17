@@ -1,13 +1,13 @@
 //! Gpt Definitions
-use crate::mbr::*;
-use crate::partitions::*;
-use crate::types::*;
+use crate::{mbr::*, partitions::*, types::*};
 use crc::crc32;
 use displaydoc::Display;
 use generic_array::{typenum::U36, GenericArray};
 use serde::{Deserialize, Serialize};
-use std::fmt;
-use std::io::{prelude::*, SeekFrom};
+use std::{
+    fmt,
+    io::{prelude::*, SeekFrom},
+};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -43,7 +43,8 @@ pub enum NewGptError {
     /// Both the Primary and Backup GPT header are corrupt or non-existent.
     InvalidGpt,
 
-    /// The size of the device does not match what the GPT Header expects. (expected: {0}, got {1})
+    /// The size of the device does not match what the GPT Header expects.
+    /// (expected: {0}, got {1})
     ///
     /// Use `Gpt::` to resolve this.
     InvalidDiskSize(ByteSize, ByteSize),
@@ -388,7 +389,8 @@ impl GptPart {
 impl GptPart {
     /// Reads a GPT Partition from a [`Read`]er.
     ///
-    /// This will advance the [`Read`]er by the size of a single partition entry.
+    /// This will advance the [`Read`]er by the size of a single partition
+    /// entry.
     ///
     /// `size_of` is [`GptHeader::partition_size`]
     fn from_reader<R: Read + Seek>(mut source: R, size_of: u32) -> Result<Self> {
@@ -601,8 +603,8 @@ impl GptPartBuilder {
 /// It is possible to create an invalid [`Gpt`] instance,
 /// for the purposes of repairing it.
 ///
-/// Using such an instance without repairing it may cause certain methods to panic.
-/// The only method safe to use is [`Gpt::repair`].
+/// Using such an instance without repairing it may cause certain methods to
+/// panic. The only method safe to use is [`Gpt::repair`].
 #[derive(Debug)]
 // Comparing this doesn't make sense except in tests.
 #[cfg_attr(test, derive(PartialEq))]
@@ -733,7 +735,8 @@ impl Gpt {
     /// In this case the [`Err`] variant will contain a [`Gpt`] Instance,
     /// which should be repaired after asking permission from the user.
     ///
-    /// If both the primary and backup GPT is corrupt, repairing will not be possible.
+    /// If both the primary and backup GPT is corrupt, repairing will not be
+    /// possible.
     pub fn from_reader<RS>(mut source: RS, block_size: BlockSize) -> Result<Self>
     where
         RS: Read + Seek,
@@ -948,7 +951,8 @@ impl Gpt {
             }
         }
         // FIXME: Support more partitions.
-        // This would require moving the first usable lba forward, and the last usable one back.
+        // This would require moving the first usable lba forward, and the last usable
+        // one back.
         assert!(header.partitions <= 128, "Too many partitions");
         //
         self.partitions.push(part);
@@ -965,7 +969,8 @@ impl Gpt {
     /// Remove an existing partition at the index `index`.
     ///
     /// Returns the removed partition.
-    /// This allows you to modify it using [`GptPartBuilder::from_part`] and then re-add it.
+    /// This allows you to modify it using [`GptPartBuilder::from_part`] and
+    /// then re-add it.
     ///
     /// Note that indexing starts at zero.
     ///
@@ -1121,8 +1126,8 @@ impl Gpt {
 
     /// Recalculate the primary and backup partition crc.
     ///
-    /// This also calls [`Gpt::recalculate_crc`], since updating the partition crc
-    /// means the header one must be updated too.
+    /// This also calls [`Gpt::recalculate_crc`], since updating the partition
+    /// crc means the header one must be updated too.
     fn recalculate_part_crc(&mut self) {
         let source_bytes = unsafe {
             std::slice::from_raw_parts(
@@ -1336,7 +1341,8 @@ mod tests {
         let _gpt = Gpt::new(BLOCK_SIZE, disk_size.into());
     }
 
-    /// Ensure that the GPT can properly be repaired if only one header is corrupt.
+    /// Ensure that the GPT can properly be repaired if only one header is
+    /// corrupt.
     #[test]
     #[ignore]
     fn corrupt_gpt_test() {
