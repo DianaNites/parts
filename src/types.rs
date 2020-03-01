@@ -1,6 +1,5 @@
 //! Types for use in [`crate::Gpt`]
 use derive_more::*;
-use serde::{Deserialize, Serialize};
 
 /// Helper to define ByteSize from_* setters.
 macro_rules! __ByteSizeImplFrom {
@@ -89,11 +88,8 @@ macro_rules! __ByteSizeImplAs {
     Ord,
     Hash,
     Default,
-    Deserialize,
-    Serialize,
 )]
 #[repr(transparent)]
-#[serde(transparent)]
 pub struct BlockSize(pub u64);
 
 /// A `ByteSize` type represents a size, in bytes.
@@ -134,12 +130,9 @@ pub struct BlockSize(pub u64);
     Ord,
     Hash,
     Default,
-    Deserialize,
-    Serialize,
 )]
 #[display(fmt = "{} Bytes", _0)]
 #[repr(transparent)]
-#[serde(transparent)]
 pub struct ByteSize(u64);
 
 impl ByteSize {
@@ -196,11 +189,8 @@ impl ByteSize {
     MulAssign,
     Hash,
     Default,
-    Deserialize,
-    Serialize,
 )]
 #[repr(transparent)]
-#[serde(transparent)]
 pub struct LogicalBlockAddress(pub u64);
 
 /// Add a [`u64`] to a [`LogicalBlockAddress`],
