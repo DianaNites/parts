@@ -15,8 +15,8 @@ serde = { version = "1.0.104", features = ["derive"] }
 bincode = "1.2.1"
 crc = "1.8.1"
 generic-array = { version = "0.13.2", features = ["serde"] }
-derive_more = "0.99.2"
-thiserror = "1.0.9"
+derive_more = "0.99.3"
+thiserror = "1.0.11"
 displaydoc = "0.1.5"
 
 [dev-dependencies]
@@ -24,7 +24,7 @@ static_assertions = "1.1.0"
 anyhow = "1.0.26"
 
 [target.'cfg(fuzzing)'.dependencies]
-honggfuzz = "0.5.45"
+honggfuzz = "0.5.46"
 
 [features]
 # Nightly is used for docs.
