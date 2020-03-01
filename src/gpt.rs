@@ -1,10 +1,17 @@
 //! Gpt Definitions
 use crate::{mbr::*, partitions::*, types::*};
-use core::fmt;
+use core::{
+    char::{decode_utf16, REPLACEMENT_CHARACTER},
+    fmt,
+    mem,
+    slice,
+};
 use crc::crc32;
 use displaydoc::Display;
-use generic_array::{typenum::U36, GenericArray};
-use serde::{Deserialize, Serialize};
+use generic_array::{
+    typenum::{U128, U36},
+    GenericArray,
+};
 #[cfg(feature = "std")]
 use std::io::{prelude::*, SeekFrom};
 #[cfg(feature = "std")]
@@ -28,7 +35,6 @@ macro_rules! _ensure_eq {
 }
 
 /// GPT Error Type.
-#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Display)]
 #[cfg_attr(feature = "std", derive(Error))]
 pub enum NewGptError {
@@ -61,6 +67,9 @@ type Result<T, E = NewGptError> = core::result::Result<T, E>;
 const EFI_PART: u64 = 0x5452_4150_2049_4645;
 
 /// A minimum of 16,384 bytes are reserved for the partition array.
+///
+/// With current GPT Partition entry sizes this means a minimum of 128
+/// partitions
 const MIN_PARTITIONS_BYTES: u64 = 16384;
 
 /// Check the validity of a GPT Header
@@ -90,7 +99,7 @@ fn check(
     // We only support 128 as a partition entry size
     assert_eq!(header.partition_size, 128);
     //
-    let old_crc = std::mem::replace(&mut header.header_crc32, 0);
+    let old_crc = mem::replace(&mut header.header_crc32, 0);
     assert_eq!(old_crc, calculate_crc(&header));
     header.header_crc32 = old_crc;
     //
@@ -103,9 +112,9 @@ fn check(
 fn calculate_crc(header: &GptHeader) -> u32 {
     // This is safe because `GptHeader` is `repr(C)`
     let source_bytes = unsafe {
-        std::slice::from_raw_parts(
+        slice::from_raw_parts(
             (header as *const _) as *const u8,
-            std::mem::size_of::<GptHeader>(),
+            mem::size_of::<GptHeader>(),
         )
     };
     // NOTE: Only supported header size is really `92`..
@@ -121,9 +130,9 @@ fn calculate_part_crc(parts: &[GptPart]) -> u32 {
     // `GptPart` is `repr(C)`, the size is correct,
     // Rust doesn't do strict aliasing
     let bytes = unsafe {
-        ::std::slice::from_raw_parts(
+        slice::from_raw_parts(
             parts.as_ptr() as *const u8,
-            ::std::mem::size_of::<GptPart>() * parts.len(),
+            mem::size_of::<GptPart>() * parts.len(),
         )
     };
     crc32::checksum_ieee(bytes)
@@ -143,7 +152,7 @@ fn uuid_hack(uuid: Uuid) -> Uuid {
 }
 
 /// The GPT Header Structure
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 #[repr(C)]
 struct GptHeader {
     /// Hard-coded to "EFI PART",
@@ -175,7 +184,6 @@ struct GptHeader {
     last_usable_lba: LogicalBlockAddress,
 
     /// Disk GUID
-    #[serde(with = "uuid::adapter::compact")]
     disk_guid: Uuid,
 
     /// Where our partition array starts on disk.
@@ -229,6 +237,7 @@ impl GptHeader {
     /// - If IO does
     ///
     /// The [`Read`]ers current position is undefined after this call.
+    #[cfg(feature = "std")]
     fn from_reader<R: Read + Seek>(mut source: R, block_size: BlockSize) -> Result<Self> {
         let obj = bincode::deserialize_from(&mut source).map_err(|e| match *e {
             bincode::ErrorKind::Io(e) => NewGptError::Io(e),
@@ -244,6 +253,7 @@ impl GptHeader {
     /// # Errors
     ///
     /// - If IO does
+    #[cfg(feature = "std")]
     fn to_writer<W: Write>(&self, mut dest: W, block_size: u64) -> Result<()> {
         bincode::serialize_into(&mut dest, self).map_err(|e| match *e {
             bincode::ErrorKind::Io(e) => NewGptError::Io(e),
@@ -286,17 +296,15 @@ impl GptHeader {
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Serialize, Deserialize)]
 // This type is not safe to clone, but tests need it.
 #[cfg_attr(test, derive(Clone, PartialEq))]
+#[derive(Default)]
 #[repr(C)]
 pub struct GptPart {
     /// Defines the type of this partition
-    #[serde(with = "uuid::adapter::compact")]
     partition_type_guid: Uuid,
 
     /// Unique identifer for this partition
-    #[serde(with = "uuid::adapter::compact")]
     partition_guid: Uuid,
 
     /// Where it starts on disk
@@ -330,14 +338,9 @@ impl GptPart {
     /// Name of the partition, if any.
     ///
     /// The conversion to [`String`] from the native UTF-16 may be lossy.
-    pub fn name(&self) -> Option<String> {
-        if self.name[0] != 0 {
-            Some(String::from_utf16_lossy(
-                self.name.as_slice().split(|n| *n == 0).next().unwrap(),
-            ))
-        } else {
-            None
-        }
+    pub fn name(&self) -> Option<&str> {
+        // TODO: Implement name
+        None
     }
 
     /// Type of the Partition
@@ -395,6 +398,7 @@ impl GptPart {
     /// entry.
     ///
     /// `size_of` is [`GptHeader::partition_size`]
+    #[cfg(feature = "std")]
     fn from_reader<R: Read + Seek>(mut source: R, size_of: u32) -> Result<Self> {
         let obj = bincode::deserialize_from(&mut source).map_err(|e| match *e {
             bincode::ErrorKind::Io(e) => NewGptError::Io(e),
@@ -406,6 +410,7 @@ impl GptPart {
     }
 
     /// Write a GPT Partition to a [`Write`]r
+    #[cfg(feature = "std")]
     fn to_writer<W: Write>(&self, mut dest: W, size_of: u32) -> Result<()> {
         bincode::serialize_into(&mut dest, self).map_err(|e| match *e {
             bincode::ErrorKind::Io(e) => NewGptError::Io(e),
@@ -448,7 +453,7 @@ impl GptPart {
 ///
 /// See method documentation
 #[derive(Debug)]
-pub struct GptPartBuilder {
+pub struct GptPartBuilder<'a> {
     partition_type_guid: Uuid,
 
     partition_guid: Uuid,
@@ -457,12 +462,12 @@ pub struct GptPartBuilder {
 
     size: ByteSize,
 
-    name: String,
+    name: &'a str,
 
     block_size: BlockSize,
 }
 
-impl GptPartBuilder {
+impl<'a> GptPartBuilder<'a> {
     /// Create a new Gpt Partition.
     ///
     /// # Examples
@@ -493,7 +498,8 @@ impl GptPartBuilder {
             partition_guid: part.partition_guid,
             start_lba: part.starting_lba,
             size: ((part.ending_lba - part.starting_lba) * block_size) + block_size.into(),
-            name: String::from_utf16_lossy(part.name.as_slice()),
+            // TODO: Name to str
+            name: todo!(),
             block_size,
         }
     }
@@ -501,9 +507,9 @@ impl GptPartBuilder {
     /// Set the name of the partition.
     ///
     /// `name` must be no more than 35 characters.
-    pub fn name(mut self, name: &str) -> Self {
+    pub fn name(mut self, name: &'a str) -> Self {
         assert!(name.len() < 36, "Name too long");
-        self.name = name.into();
+        self.name = name;
         self
     }
 
@@ -619,7 +625,7 @@ pub struct Gpt {
     /// Can be None if corrupt
     backup: Option<GptHeader>,
 
-    partitions: Vec<GptPart>,
+    partitions: GenericArray<GptPart, U128>,
 
     /// The devices block size. ex, 512, 4096
     block_size: BlockSize,
@@ -704,7 +710,7 @@ impl Gpt {
             mbr,
             header,
             backup,
-            partitions: Vec::new(),
+            partitions: Default::default(),
             block_size,
             disk_size,
         }
@@ -739,6 +745,7 @@ impl Gpt {
     ///
     /// If both the primary and backup GPT is corrupt, repairing will not be
     /// possible.
+    #[cfg(feature = "std")]
     pub fn from_reader<RS>(mut source: RS, block_size: BlockSize) -> Result<Self>
     where
         RS: Read + Seek,
@@ -859,6 +866,7 @@ impl Gpt {
     /// # Ok(())
     /// # }
     /// ```
+    #[cfg(feature = "std")]
     pub fn to_writer<W: Write + Seek>(&self, mut dest: W) -> Result<()> {
         let header = self.header.as_ref().unwrap();
         let backup = self.backup.as_ref().unwrap();
@@ -930,17 +938,13 @@ impl Gpt {
         //
         assert!(
             part.starting_lba >= header.first_usable_lba,
-            format!(
-                "Invalid Partition Span: {:?}",
-                (part.starting_lba, part.ending_lba)
-            )
+            "Invalid Partition Span: {:?}",
+            (part.starting_lba, part.ending_lba)
         );
         assert!(
             part.ending_lba <= header.last_usable_lba,
-            format!(
-                "Invalid Partition Span: {:?}",
-                (part.starting_lba, part.ending_lba)
-            )
+            "Invalid Partition Span: {:?}",
+            (part.starting_lba, part.ending_lba)
         );
         for existing in &self.partitions {
             if part.starting_lba >= existing.starting_lba
@@ -956,8 +960,8 @@ impl Gpt {
         // This would require moving the first usable lba forward, and the last usable
         // one back.
         assert!(header.partitions <= 128, "Too many partitions");
-        //
-        self.partitions.push(part);
+        // TODO: Partition push
+        // self.partitions.push(part);
         // `GptHeader::partitions` can be larger than the
         // actual number of partitions, at least in practice.
         if self.partitions.len() > header.partitions as usize {
@@ -980,7 +984,9 @@ impl Gpt {
     ///
     /// - If `index` is out of bounds.
     pub fn remove_partition(&mut self, index: usize) -> GptPart {
-        self.partitions.swap_remove(index)
+        // TODO: Partition remove
+        todo!()
+        // self.partitions.swap_remove(index)
     }
 
     /// Get the first logical block address you can use for partitions.
@@ -1132,9 +1138,9 @@ impl Gpt {
     /// crc means the header one must be updated too.
     fn recalculate_part_crc(&mut self) {
         let source_bytes = unsafe {
-            std::slice::from_raw_parts(
+            slice::from_raw_parts(
                 self.partitions.as_ptr() as *const u8,
-                std::mem::size_of::<GptPart>() * self.partitions.len(),
+                mem::size_of::<GptPart>() * self.partitions.len(),
             )
         };
         let crc = crc32::checksum_ieee(&source_bytes);
