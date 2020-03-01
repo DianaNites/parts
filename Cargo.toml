@@ -10,14 +10,13 @@ license = "MIT OR Apache-2.0"
 description = "A GPT Partition Manager"
 
 [dependencies]
-uuid = { version = "0.8.1", features = ["v4", "serde"] }
-serde = { version = "1.0.104", features = ["derive"] }
+uuid = { version = "0.8.1", default-features = false, features = ["v4", "serde"] }
+serde = { version = "1.0.104", default-features = false, features = ["derive"] }
 bincode = "1.2.1"
 crc = "1.8.1"
 generic-array = { version = "0.13.2", features = ["serde"] }
 derive_more = "0.99.3"
-thiserror = "1.0.11"
-displaydoc = "0.1.5"
+displaydoc = { version = "0.1.5", default-features = false }
 
 [dev-dependencies]
 static_assertions = "1.1.0"
@@ -27,6 +26,8 @@ anyhow = "1.0.26"
 honggfuzz = "0.5.46"
 
 [features]
+# Enable support for various standard library types
+std = []
 # Nightly is used for docs.
 nightly = []
 
