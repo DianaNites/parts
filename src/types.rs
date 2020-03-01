@@ -205,7 +205,7 @@ pub struct LogicalBlockAddress(pub u64);
 
 /// Add a [`u64`] to a [`LogicalBlockAddress`],
 /// returning a [`LogicalBlockAddress`].
-impl std::ops::Add<u64> for LogicalBlockAddress {
+impl core::ops::Add<u64> for LogicalBlockAddress {
     type Output = Self;
 
     fn add(self, other: u64) -> Self {
@@ -215,7 +215,7 @@ impl std::ops::Add<u64> for LogicalBlockAddress {
 
 /// Subtract a [`u64`] from a [`LogicalBlockAddress`],
 /// returning a [`LogicalBlockAddress`].
-impl std::ops::Sub<u64> for LogicalBlockAddress {
+impl core::ops::Sub<u64> for LogicalBlockAddress {
     type Output = Self;
 
     fn sub(self, other: u64) -> Self {
@@ -225,7 +225,7 @@ impl std::ops::Sub<u64> for LogicalBlockAddress {
 
 /// Multiplying a [`LogicalBlockAddress`] by a [`BlockSize`]
 /// gives the byte offset of the [`LogicalBlockAddress`], in [`ByteSize`]
-impl std::ops::Mul<BlockSize> for LogicalBlockAddress {
+impl core::ops::Mul<BlockSize> for LogicalBlockAddress {
     type Output = ByteSize;
 
     fn mul(self, other: BlockSize) -> ByteSize {
@@ -235,7 +235,7 @@ impl std::ops::Mul<BlockSize> for LogicalBlockAddress {
 
 /// Dividing a [`ByteSize`] by a [`BlockSize`]
 /// returns a [`LogicalBlockAddress`].
-impl std::ops::Div<BlockSize> for ByteSize {
+impl core::ops::Div<BlockSize> for ByteSize {
     type Output = LogicalBlockAddress;
 
     fn div(self, other: BlockSize) -> LogicalBlockAddress {
