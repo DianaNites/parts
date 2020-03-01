@@ -1,16 +1,16 @@
 //! MBR definitions
 use crate::types::*;
-use core::convert::TryFrom;
+use core::{
+    convert::{TryFrom, TryInto},
+    mem::size_of,
+};
 use displaydoc::Display;
 use generic_array::{typenum::U440, GenericArray};
-use serde::{Deserialize, Serialize};
 #[cfg(feature = "std")]
-use std::io::{prelude::*, SeekFrom};
+use std::io::prelude::*;
 #[cfg(feature = "std")]
 use thiserror::Error;
 
-// FIXME: Not ideal but :shrug:. QuirkBrokenPartedCHS needs it?
-#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Display)]
 #[cfg_attr(feature = "std", derive(Error))]
 pub(crate) enum MbrError {
@@ -18,22 +18,21 @@ pub(crate) enum MbrError {
     /// Reading or writing the MBR failed.
     Io(#[from] std::io::Error),
 
-    /// The MBR signature is invalid. (Expected: 0x55AA-LE, got: `{0:X?}`)
-    InvalidMbrSignature([u8; 2]),
+    /// The MBR was invalid: {0}
+    InvalidMbr(&'static str),
 
-    /// The MBR has more partitions than it should.
-    /// A GPT Protective MBR should only ever have one partition, with the
-    /// GPT Protective OS type.
-    InvalidPartitions,
+    /// Not a GUID Partition Table, MBR has real partitions.
+    NotGpt,
 
-    /// Unknown MBR error.
-    Unknown,
+    /// The argument {0} was invalid: {1}
+    InvalidArgument(&'static str, &'static str),
 }
 
 type Result<T, E = MbrError> = core::result::Result<T, E>;
 
 /// GPT Protective MBR
-#[derive(Serialize, Deserialize, PartialEq)]
+#[derive(PartialEq, Copy, Clone)]
+#[repr(C, packed)]
 pub(crate) struct ProtectiveMbr {
     /// Bios boot code. Unused by GPT.
     boot_code: GenericArray<u8, U440>,
@@ -48,8 +47,8 @@ pub(crate) struct ProtectiveMbr {
     /// Hard-coded to one partition, covering the entire device.
     partitions: [MbrPart; 4],
 
-    /// Hard-coded to 0xAA55.
-    signature: [u8; 2],
+    /// Hard-coded to 0xAA55-LE.
+    signature: u16,
 }
 
 // Crate public
@@ -71,7 +70,7 @@ impl ProtectiveMbr {
                     start_track: 0x00,
                     //
                     os_type: 0xEE,
-                    // Technically incorrect, but
+                    // Technically incorrect?, but
                     // Existing implementations seem to do the same thing here.
                     end_head: 0xFF,
                     end_sector: 0xFF,
@@ -84,8 +83,30 @@ impl ProtectiveMbr {
                 MbrPart::default(),
                 MbrPart::default(),
             ],
-            signature: [0x55, 0xAA],
+            signature: 0xAA55,
         }
+    }
+
+    /// Read a `ProtectiveMbr` from a byte slice.
+    ///
+    /// # Errors
+    ///
+    /// - If `source` is not at least `block_size` bytes.
+    /// - If the MBR is invalid
+    pub(crate) fn from_bytes(source: &[u8], block_size: BlockSize) -> Result<Self> {
+        let block_size = block_size.0.try_into().unwrap();
+        if source.len() < block_size {
+            return Err(MbrError::InvalidArgument(
+                "source",
+                "Not enough data for MBR",
+            ));
+        }
+        // Safe because ProtectiveMbr is simple and repr(C, packed),
+        // any value is valid, and we check the size of `source` above.
+        let mbr = unsafe {
+            (source[..size_of::<ProtectiveMbr>()].as_ptr() as *const ProtectiveMbr).read_unaligned()
+        };
+        mbr.validate()
     }
 
     /// Read a `ProtectiveMbr` from a `Read`er.
@@ -94,26 +115,45 @@ impl ProtectiveMbr {
     ///
     /// - If the `Read`er errors.
     /// - If the MBR is invalid.
-    /// - If an invalid MBR from GNU Parted is detected. This error is
-    ///   recoverable.
     ///
     /// # Details
     ///
     /// On success, this will have read exactly `block_size` bytes.
     ///
     /// On error, the amount read is unspecified.
-    pub(crate) fn from_reader<R: Read + Seek>(
-        mut source: R,
-        block_size: BlockSize,
-    ) -> Result<Self> {
-        let obj: Self = bincode::deserialize_from(&mut source).map_err(|err| match *err {
-            bincode::ErrorKind::Io(e) => MbrError::Io(e),
-            _ => MbrError::Unknown,
-        })?;
-        // Seek past the remaining block.
-        source.seek(SeekFrom::Current(block_size.0 as i64 - 512))?;
+    #[cfg(feature = "std")]
+    pub(crate) fn from_reader<R: Read>(mut source: R, block_size: BlockSize) -> Result<Self> {
+        let b_size = block_size.0.try_into().unwrap();
+        let mut data = vec![0; b_size];
+        source.read_exact(&mut data)?;
         //
-        obj.validate()
+        Self::from_bytes(&data, block_size)
+    }
+
+    /// Write a GPT Protective MBR to `dest`
+    ///
+    /// # Errors
+    ///
+    /// - If `dest` is not at least `block_size` bytes
+    ///
+    /// # Details
+    ///
+    /// On success, exactly `block_size` bytes will have been written to `dest`.
+    ///
+    /// On error, `dest` is unchanged.
+    pub(crate) fn write_bytes(&mut self, dest: &mut [u8], block_size: BlockSize) -> Result<()> {
+        let block_size = block_size.0.try_into().unwrap();
+        if dest.len() < block_size {
+            return Err(MbrError::InvalidArgument(
+                "dest",
+                "Not enough space for MBR",
+            ));
+        }
+        let raw = self as *const ProtectiveMbr as *const u8;
+        // Safe because we know the sizes
+        let raw = unsafe { core::slice::from_raw_parts(raw, size_of::<ProtectiveMbr>()) };
+        dest[..size_of::<ProtectiveMbr>()].copy_from_slice(raw);
+        Ok(())
     }
 
     /// Write a GPT Protective MBR to a `Write`r.
@@ -127,18 +167,12 @@ impl ProtectiveMbr {
     /// On success, this will have written exactly `block_size` bytes.
     ///
     /// On error, the amount written is unspecified.
-    pub(crate) fn to_writer<W: Write + Seek>(
-        &self,
-        mut dest: W,
-        block_size: BlockSize,
-    ) -> Result<()> {
-        bincode::serialize_into(&mut dest, self).map_err(|err| match *err {
-            bincode::ErrorKind::Io(e) => MbrError::Io(e),
-            _ => MbrError::Unknown,
-        })?;
-        // Account for reserved space.
-        let len = (block_size.0 - 512) as usize;
-        dest.write_all(&vec![0; len])?;
+    #[cfg(feature = "std")]
+    pub(crate) fn write<W: Write>(&mut self, mut dest: W, block_size: BlockSize) -> Result<()> {
+        let b_size = block_size.0.try_into().unwrap();
+        let mut data = vec![0; b_size];
+        self.write_bytes(&mut data, block_size)?;
+        dest.write_all(&data)?;
         Ok(())
     }
 }
@@ -147,41 +181,29 @@ impl ProtectiveMbr {
 impl ProtectiveMbr {
     /// Validate the Protective MBR.
     ///
-    /// # Details
+    /// # Errors
     ///
-    /// - Ensures the signature is correct.
-    /// - Ensures
-    /// - Ensures there are no other partitions.
+    /// The MBR is considered invalid if:
     ///
-    /// This will also silently fix a GNU Parted bug
-    /// where the `start_sector` is 0x01 instead of 0x02,
-    /// and the `end_head` is 0xFE instead of 0xFF.
-    fn validate(mut self) -> Result<Self> {
-        if !(self.signature[0] == 0x55 && self.signature[1] == 0xAA) {
-            return Err(MbrError::InvalidMbrSignature(self.signature));
+    /// - The signature is not correct
+    /// - The GPT Protective partition is missing
+    /// - If other partitions exist. In this case the error is
+    ///   [`MbrError::NotGpt`]
+    fn validate(self) -> Result<Self> {
+        if self.signature != 0xAA55 {
+            return Err(MbrError::InvalidMbr(
+                "MBR signature invalid. Expected 0xAA55",
+            ));
         }
-        let part: &mut MbrPart = &mut self.partitions[0];
+        let part: MbrPart = self.partitions[0];
         if part.os_type != 0xEE {
-            return Err(MbrError::InvalidPartitions);
+            return Err(MbrError::InvalidMbr("Missing GPT Protective Partition"));
         }
 
-        // NOTE: Fixes a GNU Parted bug.
-        if part.start_sector == 0x01 || part.end_head == 0xFE {
-            part.start_sector = 0x02;
-            part.end_head = 0xFF;
-        }
-
-        if !(part.start_head == 0x00 && part.start_sector == 0x02 && part.start_track == 0x00) {
-            return Err(MbrError::InvalidPartitions);
-        };
-
-        if !(part.end_head == 0xFF && part.end_sector == 0xFF && part.end_track == 0xFF) {
-            return Err(MbrError::InvalidPartitions);
-        };
-
-        for part in &self.partitions[1..] {
+        let parts = self.partitions;
+        for part in &parts[1..] {
             if *part != MbrPart::default() {
-                return Err(MbrError::InvalidPartitions);
+                return Err(MbrError::NotGpt);
             }
         }
         Ok(self)
@@ -192,12 +214,13 @@ impl ProtectiveMbr {
 impl core::fmt::Debug for ProtectiveMbr {
     fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         fmt.debug_struct("ProtectiveMbr")
-            .field("partition 0", &self.partitions[0])
+            .field("partition 0", &{ self.partitions[0] })
             .finish()
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, PartialEq, Copy, Clone)]
+#[repr(C)]
 struct MbrPart {
     /// Whether the partition is "bootable". Unused by GPT.
     /// Hard-coded to 0.
@@ -228,19 +251,19 @@ struct MbrPart {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use anyhow::Result as AResult;
     use static_assertions::*;
-    use std::io::Cursor;
+    use std::io::{prelude::*, Cursor};
 
     const TEST_PARTS_CF: &str = "tests/data/test_parts_cf";
     const BLOCK_SIZE: BlockSize = BlockSize(512);
 
-    type Result = AResult<()>;
+    type Result = anyhow::Result<()>;
 
     assert_eq_size!(MbrPart, [u8; 16]);
     assert_eq_size!(ProtectiveMbr, [u8; 512]);
 
     /// Basic reading should work and validate correctly.
+    #[cfg(feature = "std")]
     #[test]
     fn read_test() -> Result {
         let mut data = Cursor::new(vec![0; BLOCK_SIZE.0 as usize]);
