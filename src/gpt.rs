@@ -1,13 +1,13 @@
 //! Gpt Definitions
 use crate::{mbr::*, partitions::*, types::*};
+use core::fmt;
 use crc::crc32;
 use displaydoc::Display;
 use generic_array::{typenum::U36, GenericArray};
 use serde::{Deserialize, Serialize};
-use std::{
-    fmt,
-    io::{prelude::*, SeekFrom},
-};
+#[cfg(feature = "std")]
+use std::io::{prelude::*, SeekFrom};
+#[cfg(feature = "std")]
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -29,8 +29,10 @@ macro_rules! _ensure_eq {
 
 /// GPT Error Type.
 #[allow(clippy::large_enum_variant)]
-#[derive(Error, Debug, Display)]
+#[derive(Debug, Display)]
+#[cfg_attr(feature = "std", derive(Error))]
 pub enum NewGptError {
+    #[cfg(feature = "std")]
     /// Reading or writing the GPT failed
     Io(#[from] std::io::Error),
 
@@ -53,7 +55,7 @@ pub enum NewGptError {
     Unknown,
 }
 
-type Result<T, E = NewGptError> = std::result::Result<T, E>;
+type Result<T, E = NewGptError> = core::result::Result<T, E>;
 
 /// "EFI PART" constant
 const EFI_PART: u64 = 0x5452_4150_2049_4645;

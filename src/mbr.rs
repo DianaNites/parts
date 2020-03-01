@@ -1,18 +1,20 @@
 //! MBR definitions
 use crate::types::*;
+use core::convert::TryFrom;
 use displaydoc::Display;
 use generic_array::{typenum::U440, GenericArray};
 use serde::{Deserialize, Serialize};
-use std::{
-    convert::TryFrom,
-    io::{prelude::*, SeekFrom},
-};
+#[cfg(feature = "std")]
+use std::io::{prelude::*, SeekFrom};
+#[cfg(feature = "std")]
 use thiserror::Error;
 
 // FIXME: Not ideal but :shrug:. QuirkBrokenPartedCHS needs it?
 #[allow(clippy::large_enum_variant)]
-#[derive(Error, Debug, Display)]
+#[derive(Debug, Display)]
+#[cfg_attr(feature = "std", derive(Error))]
 pub(crate) enum MbrError {
+    #[cfg(feature = "std")]
     /// Reading or writing the MBR failed.
     Io(#[from] std::io::Error),
 
@@ -28,7 +30,7 @@ pub(crate) enum MbrError {
     Unknown,
 }
 
-type Result<T, E = MbrError> = std::result::Result<T, E>;
+type Result<T, E = MbrError> = core::result::Result<T, E>;
 
 /// GPT Protective MBR
 #[derive(Serialize, Deserialize, PartialEq)]
@@ -187,8 +189,8 @@ impl ProtectiveMbr {
 }
 
 /// Smaller Debug output.
-impl std::fmt::Debug for ProtectiveMbr {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for ProtectiveMbr {
+    fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         fmt.debug_struct("ProtectiveMbr")
             .field("partition 0", &self.partitions[0])
             .finish()

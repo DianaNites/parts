@@ -39,13 +39,18 @@
 //! # Ok(())
 //! # }
 //! ```
+#![cfg_attr(not(any(feature = "std", test)), no_std)]
 #![deny(missing_docs)]
 #![cfg_attr(feature = "nightly", feature(doc_cfg))]
+
+#[cfg(feature = "std")]
 mod gpt;
+// #[cfg(feature = "std")]
 mod mbr;
 mod partitions;
 pub mod types;
 
+#[cfg(feature = "std")]
 pub use gpt::*;
 pub use partitions::*;
 pub use uuid;
