@@ -13,7 +13,7 @@ use thiserror::Error;
 
 #[derive(Debug, Display)]
 #[cfg_attr(any(feature = "std", test), derive(Error))]
-pub(crate) enum MbrError {
+pub enum MbrError {
     #[cfg(any(feature = "std", test))]
     /// Reading or writing the MBR failed.
     Io(#[from] std::io::Error),
@@ -33,7 +33,7 @@ type Result<T, E = MbrError> = core::result::Result<T, E>;
 /// GPT Protective MBR
 #[derive(PartialEq, Copy, Clone)]
 #[repr(C, packed)]
-pub(crate) struct ProtectiveMbr {
+pub struct ProtectiveMbr {
     /// Bios boot code. Unused by GPT.
     boot_code: GenericArray<u8, U440>,
 
@@ -56,7 +56,7 @@ impl ProtectiveMbr {
     /// Creates a new Protective MBR
     ///
     /// `last_lba`, the last usable logical block address on the device.
-    pub(crate) fn new(last_lba: LogicalBlockAddress) -> Self {
+    pub fn new(last_lba: LogicalBlockAddress) -> Self {
         Self {
             boot_code: GenericArray::default(),
             unique_signature: [0u8; 4],
@@ -99,7 +99,7 @@ impl ProtectiveMbr {
     /// On success, this will have read exactly `block_size` bytes.
     ///
     /// On error, the amount read is unspecified.
-    pub(crate) fn from_bytes(source: &mut &[u8], block_size: BlockSize) -> Result<Self> {
+    pub fn from_bytes(source: &mut &[u8], block_size: BlockSize) -> Result<Self> {
         let block_size = block_size.0.try_into().unwrap();
         if source.len() < block_size {
             return Err(MbrError::InvalidArgument(
@@ -130,7 +130,7 @@ impl ProtectiveMbr {
     ///
     /// On error, the amount read is unspecified.
     #[cfg(any(feature = "std", test))]
-    pub(crate) fn from_reader<R: Read>(mut source: R, block_size: BlockSize) -> Result<Self> {
+    pub fn from_reader<R: Read>(mut source: R, block_size: BlockSize) -> Result<Self> {
         let b_size = block_size.0.try_into().unwrap();
         let mut data = vec![0; b_size];
         source.read_exact(&mut data)?;
@@ -149,7 +149,7 @@ impl ProtectiveMbr {
     /// On success, exactly `block_size` bytes will have been written to `dest`.
     ///
     /// On error, `dest` is unchanged.
-    pub(crate) fn write_bytes(&mut self, dest: &mut [u8], block_size: BlockSize) -> Result<()> {
+    pub fn write_bytes(&mut self, dest: &mut [u8], block_size: BlockSize) -> Result<()> {
         let block_size = block_size.0.try_into().unwrap();
         if dest.len() < block_size {
             return Err(MbrError::InvalidArgument(
@@ -176,7 +176,7 @@ impl ProtectiveMbr {
     ///
     /// On error, the amount written is unspecified.
     #[cfg(any(feature = "std", test))]
-    pub(crate) fn write<W: Write>(&mut self, mut dest: W, block_size: BlockSize) -> Result<()> {
+    pub fn write<W: Write>(&mut self, mut dest: W, block_size: BlockSize) -> Result<()> {
         let b_size = block_size.0.try_into().unwrap();
         let mut data = vec![0; b_size];
         self.write_bytes(&mut data, block_size)?;
