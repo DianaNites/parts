@@ -1,14 +1,58 @@
 //! Raw Gpt stuff
 use super::{header::*, partition::*};
-use crate::types::*;
-use uuid::Uuid;
-
-use crate::mbr::ProtectiveMbr;
+use crate::{mbr::ProtectiveMbr, types::*};
 use generic_array::{
     typenum::{Unsigned, U128},
     ArrayLength,
     GenericArray,
 };
+use uuid::Uuid;
+
+fn validate<F: FnMut(ByteSize, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])>(
+    primary: &Header,
+    alt: &Header,
+    mut func: F,
+    block_size: BlockSize,
+    disk_size: ByteSize,
+    mut cb: CB,
+) -> Result<()> {
+    if primary.this != LogicalBlockAddress(1) {
+        return Err(Error::Invalid("Corrupt Primary GPT Header"));
+    }
+    let crc = calculate_part_crc(
+        &mut func,
+        primary.partitions as u64,
+        block_size,
+        primary.array,
+        &mut cb,
+    )?;
+    if crc != primary.partitions_crc32 {
+        return Err(Error::Invalid("Primary Partition Array CRC32 mismatch"));
+    }
+    let last_lba = (disk_size / block_size) - 1;
+    if primary.alt != last_lba {
+        return Err(Error::Invalid("Corrupt Primary GPT Header"));
+    }
+    //
+    if alt.this != last_lba {
+        return Err(Error::Invalid("Corrupt Backup GPT Header"));
+    }
+    if alt.alt != LogicalBlockAddress(1) {
+        return Err(Error::Invalid("Corrupt Backup GPT Header"));
+    }
+    let crc = calculate_part_crc(
+        &mut func,
+        alt.partitions as u64,
+        block_size,
+        alt.array,
+        &mut cb,
+    )?;
+    if crc != alt.partitions_crc32 {
+        return Err(Error::Invalid("Backup Partition Array CRC32 mismatch"));
+    }
+    //
+    Ok(())
+}
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Gpt<N = U128>
@@ -82,7 +126,7 @@ where
         let alt = Header::from_bytes(&mut alt, block_size)?;
         //
         let mut partitions: GenericArray<Partition, _> = Default::default();
-        Gpt::validate(
+        validate(
             &primary,
             &alt,
             &mut func,
@@ -102,54 +146,6 @@ where
             uuid: primary.uuid,
             partitions,
         })
-    }
-}
-
-impl Gpt {
-    fn validate<F: FnMut(ByteSize, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])>(
-        primary: &Header,
-        alt: &Header,
-        mut func: F,
-        block_size: BlockSize,
-        disk_size: ByteSize,
-        mut cb: CB,
-    ) -> Result<()> {
-        if primary.this != LogicalBlockAddress(1) {
-            return Err(Error::Invalid("Corrupt Primary GPT Header"));
-        }
-        let crc = calculate_part_crc(
-            &mut func,
-            primary.partitions as u64,
-            block_size,
-            primary.array,
-            &mut cb,
-        )?;
-        if crc != primary.partitions_crc32 {
-            return Err(Error::Invalid("Primary Partition Array CRC32 mismatch"));
-        }
-        let last_lba = (disk_size / block_size) - 1;
-        if primary.alt != last_lba {
-            return Err(Error::Invalid("Corrupt Primary GPT Header"));
-        }
-        //
-        if alt.this != last_lba {
-            return Err(Error::Invalid("Corrupt Backup GPT Header"));
-        }
-        if alt.alt != LogicalBlockAddress(1) {
-            return Err(Error::Invalid("Corrupt Backup GPT Header"));
-        }
-        let crc = calculate_part_crc(
-            &mut func,
-            alt.partitions as u64,
-            block_size,
-            alt.array,
-            &mut cb,
-        )?;
-        if crc != alt.partitions_crc32 {
-            return Err(Error::Invalid("Backup Partition Array CRC32 mismatch"));
-        }
-        //
-        Ok(())
     }
 }
 
