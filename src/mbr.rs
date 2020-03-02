@@ -160,7 +160,7 @@ impl ProtectiveMbr {
         let raw = self as *const ProtectiveMbr as *const u8;
         // Safe because we know the sizes
         let raw = unsafe { core::slice::from_raw_parts(raw, size_of::<ProtectiveMbr>()) };
-        dest[..size_of::<ProtectiveMbr>()].copy_from_slice(raw);
+        dest[..block_size].copy_from_slice(raw);
         Ok(())
     }
 
