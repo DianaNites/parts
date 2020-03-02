@@ -93,7 +93,13 @@ impl ProtectiveMbr {
     ///
     /// - If `source` is not at least `block_size` bytes.
     /// - If the MBR is invalid
-    pub(crate) fn from_bytes(source: &[u8], block_size: BlockSize) -> Result<Self> {
+    ///
+    /// # Details
+    ///
+    /// On success, this will have read exactly `block_size` bytes.
+    ///
+    /// On error, the amount read is unspecified.
+    pub(crate) fn from_bytes(source: &mut &[u8], block_size: BlockSize) -> Result<Self> {
         let block_size = block_size.0.try_into().unwrap();
         if source.len() < block_size {
             return Err(MbrError::InvalidArgument(
@@ -106,7 +112,9 @@ impl ProtectiveMbr {
         let mbr = unsafe {
             (source[..size_of::<ProtectiveMbr>()].as_ptr() as *const ProtectiveMbr).read_unaligned()
         };
-        mbr.validate()
+        let mbr = mbr.validate()?;
+        *source = &source[block_size..];
+        Ok(mbr)
     }
 
     /// Read a `ProtectiveMbr` from a `Read`er.
@@ -127,7 +135,7 @@ impl ProtectiveMbr {
         let mut data = vec![0; b_size];
         source.read_exact(&mut data)?;
         //
-        Self::from_bytes(&data, block_size)
+        Self::from_bytes(&mut data.as_slice(), block_size)
     }
 
     /// Write a GPT Protective MBR to `dest`
