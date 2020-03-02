@@ -6,6 +6,8 @@ use std::io::{prelude::*, SeekFrom};
 #[cfg(feature = "std")]
 use thiserror::Error;
 
+mod header;
+mod partition;
 mod raw;
 
 /// GPT Error Type.
@@ -33,15 +35,6 @@ pub enum NewGptError {
 }
 
 type Result<T, E = NewGptError> = core::result::Result<T, E>;
-
-/// "EFI PART" constant
-const EFI_PART: u64 = 0x5452_4150_2049_4645;
-
-/// A minimum of 16,384 bytes are reserved for the partition array.
-///
-/// With current GPT Partition entry sizes this means a minimum of 128
-/// partitions
-const MIN_PARTITIONS_BYTES: u64 = 16384;
 
 /// A GPT Disk
 ///
@@ -614,26 +607,9 @@ impl Gpt {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use static_assertions::*;
-    use std::{error::Error, io::Cursor};
+    use crate::util::{Result, *};
+    use std::io::Cursor;
     use uuid::Uuid;
-
-    static TEST_PARTS: &str = "tests/data/test_parts";
-    static TEST_PARTS_CF: &str = "tests/data/test_parts_cf";
-    const BLOCK_SIZE: BlockSize = BlockSize(512);
-    const LARGE_BLOCK_SIZE: BlockSize = BlockSize(4096);
-    // 10 * 1024^2
-    const TEN_MIB_BYTES: usize = 10_485_760;
-
-    const CF_DISK_GUID: &str = "A17875FB-1D86-EE4D-8DFE-E3E8ABBCD364";
-    const CF_PART_GUID: &str = "97954376-2BB6-534B-A015-DF434A94ABA2";
-    const LINUX_PART_GUID: PartitionType = PartitionType::LinuxFilesystemData;
-
-    type Result = std::result::Result<(), Box<dyn Error>>;
-
-    // We rely on GptPart being exactly 128 bytes for crc calculation,
-    // directly from a `Vec<GptPart>`.
-    assert_eq_size!(GptPart, [u8; 128]);
 
     // Strictly speaking it should be 92, but should be fine
     // since we only depend on the first 92 bytes, and the rest is padding.

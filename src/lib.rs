@@ -44,6 +44,9 @@
 #![cfg_attr(feature = "nightly", feature(doc_cfg))]
 #![allow(dead_code)]
 
+#[cfg(test)]
+mod util;
+
 mod gpt;
 mod mbr;
 mod partitions;

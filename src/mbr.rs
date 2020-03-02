@@ -6,15 +6,15 @@ use core::{
 };
 use displaydoc::Display;
 use generic_array::{typenum::U440, GenericArray};
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", test))]
 use std::io::prelude::*;
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", test))]
 use thiserror::Error;
 
 #[derive(Debug, Display)]
-#[cfg_attr(feature = "std", derive(Error))]
+#[cfg_attr(any(feature = "std", test), derive(Error))]
 pub(crate) enum MbrError {
-    #[cfg(feature = "std")]
+    #[cfg(any(feature = "std", test))]
     /// Reading or writing the MBR failed.
     Io(#[from] std::io::Error),
 
@@ -129,7 +129,7 @@ impl ProtectiveMbr {
     /// On success, this will have read exactly `block_size` bytes.
     ///
     /// On error, the amount read is unspecified.
-    #[cfg(feature = "std")]
+    #[cfg(any(feature = "std", test))]
     pub(crate) fn from_reader<R: Read>(mut source: R, block_size: BlockSize) -> Result<Self> {
         let b_size = block_size.0.try_into().unwrap();
         let mut data = vec![0; b_size];
@@ -175,7 +175,7 @@ impl ProtectiveMbr {
     /// On success, this will have written exactly `block_size` bytes.
     ///
     /// On error, the amount written is unspecified.
-    #[cfg(feature = "std")]
+    #[cfg(any(feature = "std", test))]
     pub(crate) fn write<W: Write>(&mut self, mut dest: W, block_size: BlockSize) -> Result<()> {
         let b_size = block_size.0.try_into().unwrap();
         let mut data = vec![0; b_size];
@@ -259,26 +259,17 @@ struct MbrPart {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::{Result, *};
     use static_assertions::*;
-
-    const TEST_PARTS_CF: &str = "tests/data/test_parts_cf";
-    const BLOCK_SIZE: BlockSize = BlockSize(512);
-
-    type Result = anyhow::Result<()>;
 
     assert_eq_size!(MbrPart, [u8; 16]);
     assert_eq_size!(ProtectiveMbr, [u8; 512]);
 
     /// Basic reading should work and validate correctly.
-    #[cfg(feature = "std")]
     #[test]
     fn read_test() -> Result {
-        let mut data = Cursor::new(vec![0; BLOCK_SIZE.0 as usize]);
-        let mut file = std::fs::File::open(TEST_PARTS_CF)?;
-        file.read_exact(data.get_mut())?;
-        //
-        let _mbr = ProtectiveMbr::from_reader(data, BLOCK_SIZE)?;
-        //
+        let data = data()?;
+        let _mbr = ProtectiveMbr::from_reader(&data[..], BLOCK_SIZE)?;
         Ok(())
     }
 }
