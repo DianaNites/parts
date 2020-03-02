@@ -260,7 +260,6 @@ struct MbrPart {
 mod tests {
     use super::*;
     use static_assertions::*;
-    use std::io::{prelude::*, Cursor};
 
     const TEST_PARTS_CF: &str = "tests/data/test_parts_cf";
     const BLOCK_SIZE: BlockSize = BlockSize(512);

@@ -10,7 +10,7 @@ license = "MIT OR Apache-2.0"
 description = "A GPT Partition Manager"
 
 [dependencies]
-uuid = { version = "0.8.1", default-features = false, features = ["v4"] }
+uuid = { version = "0.8.1", default-features = false, features = ["v4", "v1"] }
 crc = { version = "1.8.1", default-features = false }
 generic-array = "0.13.2"
 derive_more = "0.99.3"
