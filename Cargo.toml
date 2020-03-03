@@ -23,7 +23,7 @@ anyhow = "1.0.26"
 thiserror = "1.0.11"
 
 [target.'cfg(fuzzing)'.dependencies]
-honggfuzz = "0.5.46"
+honggfuzz = "0.5.47"
 
 [features]
 # Enable support for various standard library types
