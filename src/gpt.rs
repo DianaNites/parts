@@ -295,6 +295,7 @@ where
     N: ArrayLength<Partition>,
     N::ArrayType: Copy,
 {
+    ///
     pub fn from_reader<RS: Read + Seek>(
         source: RS,
         block_size: BlockSize,
@@ -303,6 +304,7 @@ where
         Gpt::from_reader_with_size(source, block_size, disk_size)
     }
 
+    ///
     pub fn to_writer<WS: Write + Seek>(
         &self,
         dest: WS,
