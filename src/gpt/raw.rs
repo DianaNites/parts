@@ -329,4 +329,26 @@ mod tests {
         assert_eq!(new_gpt, gpt);
         Ok(())
     }
+
+    #[test]
+    #[should_panic = "Invalid Protective MBR"]
+    fn missing_mbr_test() {
+        let raw = [0; 1024];
+        let _gpt = read_gpt_size::<U128>(&raw).unwrap();
+    }
+
+    #[test]
+    #[should_panic = "Invalid Signature"]
+    fn missing_gpt_test() {
+        let mut raw = data().unwrap();
+        raw[512..][..512].copy_from_slice(&[0; 512]);
+        let _gpt = read_gpt_size::<U128>(&raw).unwrap();
+    }
+
+    /// Don't panic on slice indexing if given an empty slice?
+    #[test]
+    #[ignore]
+    fn empty_bytes_regress() {
+        read_gpt_size::<U128>(&[]).unwrap();
+    }
 }
