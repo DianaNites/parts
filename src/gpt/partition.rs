@@ -127,6 +127,10 @@ impl Partition {
         let raw = unsafe { slice::from_raw_parts(raw, mem::size_of::<RawPartition>()) };
         dest[..mem::size_of::<RawPartition>()].copy_from_slice(raw);
     }
+
+    pub fn uuid(&self) -> Uuid {
+        self.guid
+    }
 }
 
 #[cfg(test)]

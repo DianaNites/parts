@@ -294,18 +294,24 @@ mod tests {
         Ok(gpt)
     }
 
+    /// Test that we can read a GPT from another tool
     #[test]
     fn read_gpt() -> Result {
         let raw = data()?;
-        read_gpt_size::<U128>(&raw)?;
+        let gpt = read_gpt_size::<U128>(&raw)?;
         read_gpt_size::<U0>(&raw)?;
         read_gpt_size::<U64>(&raw)?;
-        read_gpt_size::<U128>(&raw)?;
         read_gpt_size::<U256>(&raw)?;
+        //
+        assert_eq!(
+            gpt.partitions[0].uuid(),
+            Uuid::parse_str(CF_PART_GUID).unwrap()
+        );
         //
         Ok(())
     }
 
+    //
     #[test]
     fn gpt_roundtrip() -> Result {
         let mut dest = vec![0; TEN_MIB_BYTES];
