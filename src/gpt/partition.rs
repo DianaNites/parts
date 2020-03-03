@@ -70,6 +70,7 @@ pub struct RawPartition {
 /// # Examples
 ///
 /// TODO: List all partitions on a device
+// FIXME: Default is not a valid partition, this is public API, don't derive it.
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub struct Partition {
     /// Defines the type of this partition
@@ -93,11 +94,11 @@ pub struct Partition {
 }
 
 impl Partition {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    pub fn from_bytes(source: &[u8]) -> Self {
+    pub(crate) fn from_bytes(source: &[u8]) -> Self {
         #[allow(clippy::cast_ptr_alignment)]
         let part = unsafe { (source.as_ptr() as *const RawPartition).read_unaligned() };
         Partition {
@@ -110,7 +111,7 @@ impl Partition {
         }
     }
 
-    pub fn to_bytes(&self, dest: &mut [u8]) {
+    pub(crate) fn to_bytes(&self, dest: &mut [u8]) {
         let mut raw = RawPartition::default();
         raw.partition_type_guid = *uuid_hack(*self.partition_type.as_bytes()).as_bytes();
         raw.partition_guid = *uuid_hack(*self.guid.as_bytes()).as_bytes();
@@ -124,7 +125,9 @@ impl Partition {
         let raw = unsafe { slice::from_raw_parts(raw, mem::size_of::<RawPartition>()) };
         dest[..mem::size_of::<RawPartition>()].copy_from_slice(raw);
     }
+}
 
+impl Partition {
     pub fn uuid(&self) -> Uuid {
         self.guid
     }
