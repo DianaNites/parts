@@ -98,11 +98,6 @@ impl Gpt {
 
     /// Write the full GPT
     ///
-    /// ~~`primary` must contain LBA0 and LBA1. That is, `block_size * 2`
-    /// bytes.~~
-    ///
-    /// ~~`alt` must be the last LBA. That is, `block_size` bytes.~~
-    ///
     /// `disk_size` must be the size of the device.
     ///
     /// `func` will be called for every partition in the GPT.
@@ -159,19 +154,8 @@ where
     /// Like [`Gpt::from_bytes`] but stores `N` partitions
     /// instead of the minimum reserved amount.
     ///
-    /// Currently 16KiB bytes, or 128 partitions, is the required reserve.
-    ///
     /// You probably don't want this method, but it can be useful
     /// if you're fine with only supporting a few partitions.
-    ///
-    /// FIXME: Wrong, we ignore after the last one and assume it's zero.
-    ///
-    /// Note that all `partitions * partition_size` bytes
-    /// will still be read from the partition array, per the GPT header,
-    /// this will simply cause any extras to be dropped.
-    ///
-    /// If you pick [`U36`] for example, and there are 40 partitions,
-    /// only the first 36 partitions can be written back out.
     pub fn from_bytes_with_size<F: FnMut(ByteSize, &mut [u8]) -> Result<()>>(
         mut primary: &[u8],
         mut alt: &[u8],
@@ -230,10 +214,11 @@ where
         let mut partition_buf = [0; PARTITION_ENTRY_SIZE as usize];
         let mut parts = 0;
         let mut digest = crc32::Digest::new(crc32::IEEE);
-        for part in self.partitions {
-            if part == Partition::default() {
-                continue;
-            }
+        for part in self
+            .partitions
+            .into_iter()
+            .filter(|p| *p != Partition::default())
+        {
             part.to_bytes(&mut partition_buf);
             digest.write(&partition_buf);
             parts += 1;
@@ -252,10 +237,12 @@ where
         );
         alt.to_bytes(&mut header_buf)?;
         func(last_lba * block_size, &header_buf)?;
-        for (i, part) in self.partitions.into_iter().enumerate() {
-            if part == Partition::default() {
-                continue;
-            }
+        for (i, part) in self
+            .partitions
+            .into_iter()
+            .filter(|p| *p != Partition::default())
+            .enumerate()
+        {
             part.to_bytes(&mut partition_buf);
             let b = alt.array * block_size;
             let b = b + (ByteSize::from_bytes(PARTITION_ENTRY_SIZE as u64) * i as u64);
@@ -273,10 +260,12 @@ where
         );
         primary.to_bytes(&mut header_buf)?;
         func(LogicalBlockAddress(1) * block_size, &header_buf)?;
-        for (i, part) in self.partitions.into_iter().enumerate() {
-            if part == Partition::default() {
-                continue;
-            }
+        for (i, part) in self
+            .partitions
+            .into_iter()
+            .filter(|p| *p != Partition::default())
+            .enumerate()
+        {
             part.to_bytes(&mut partition_buf);
             let b = primary.array * block_size;
             let b = b + (ByteSize::from_bytes(PARTITION_ENTRY_SIZE as u64) * i as u64);
