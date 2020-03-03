@@ -307,6 +307,7 @@ mod tests {
             gpt.partitions[0].uuid(),
             Uuid::parse_str(CF_PART_GUID).unwrap()
         );
+        assert_eq!(gpt.uuid, Uuid::parse_str(CF_DISK_GUID).unwrap());
         //
         Ok(())
     }
