@@ -1,10 +1,8 @@
 //! Handle GPT header
+use super::{error::*, partition::MIN_PARTITIONS_BYTES};
 use crate::types::*;
 use core::{convert::TryInto, mem, slice};
 use crc::crc32;
-use displaydoc::Display;
-#[cfg(any(feature = "std", test))]
-use thiserror::Error;
 use uuid::Uuid;
 
 /// "EFI PART" constant as a u64
@@ -16,32 +14,17 @@ const REVISION: u32 = 0x0001_0000;
 /// Current/supported GPT Header size.
 ///
 /// Only used when writing, can in theory read and validate larger headers.
-const HEADER_SIZE: u32 = 92;
+pub const HEADER_SIZE: u32 = 92;
 
 /// Current/supported GPT Partition Entry size.
 ///
 /// Only used when writing, can in theory read and validate larger entries.
 pub const PARTITION_ENTRY_SIZE: u32 = 128;
 
-#[derive(Debug, Display)]
-#[cfg_attr(any(feature = "std", test), derive(Error))]
-pub enum Error {
-    /// Not enough data was provided
-    NotEnough,
-
-    /// Encountered an unsupported GPT format
-    Unsupported,
-
-    /// The GPT Header was invalid: {0}
-    Invalid(&'static str),
-}
-
-pub type Result<T> = core::result::Result<T, Error>;
-
 /// GPT stores UUID's in big endian, but with the time* fields as little endian.
 ///
 /// See Appendix A for more details.
-fn uuid_hack(uuid: [u8; 16]) -> Uuid {
+pub fn uuid_hack(uuid: [u8; 16]) -> Uuid {
     // Works because from_bytes treats the fields as big endian
     // as_fields types them for us, still big-endian
     // and swap_bytes swaps the bytes, making them little endian.
@@ -171,6 +154,39 @@ pub struct Header {
     /// Size of each partition entry structure.
     /// Must be 128 * 2^n, where n >= 0
     pub partition_size: u32,
+}
+
+impl Header {
+    pub fn new(
+        this: LogicalBlockAddress,
+        alt: LogicalBlockAddress,
+        partitions: u32,
+        partitions_crc32: u32,
+        disk_uuid: Uuid,
+        block_size: BlockSize,
+        disk_size: ByteSize,
+    ) -> Self {
+        let array_size = LogicalBlockAddress(MIN_PARTITIONS_BYTES / block_size.0);
+        let last = (disk_size / block_size) - 1;
+        Self {
+            this,
+            alt,
+            // Partition array, plus the MBR and GPT header
+            first_usable: array_size + 2,
+            // Partition array, minus GPT header
+            last_usable: last - array_size - 1,
+            uuid: disk_uuid,
+            partitions,
+            //
+            array: if this.0 == 1 {
+                LogicalBlockAddress(2)
+            } else {
+                last - array_size
+            },
+            partitions_crc32,
+            partition_size: PARTITION_ENTRY_SIZE,
+        }
+    }
 }
 
 impl Header {

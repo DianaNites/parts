@@ -1,6 +1,10 @@
 //! Handle partitions
-use super::header::{Result, PARTITION_ENTRY_SIZE};
+use super::{
+    error::Result,
+    header::{uuid_hack, PARTITION_ENTRY_SIZE},
+};
 use crate::types::*;
+use core::{mem, slice};
 use crc::{crc32, Hasher32};
 use generic_array::{typenum::U36, GenericArray};
 use uuid::Uuid;
@@ -9,7 +13,7 @@ use uuid::Uuid;
 ///
 /// With current GPT Partition entry sizes this means a minimum of 128
 /// partitions
-const MIN_PARTITIONS_BYTES: u64 = 16384;
+pub const MIN_PARTITIONS_BYTES: u64 = 16384;
 
 /// Supported max partitions.
 const MAX_PARTITIONS: usize = (MIN_PARTITIONS_BYTES / PARTITION_ENTRY_SIZE as u64) as usize;
@@ -42,7 +46,7 @@ pub fn calculate_part_crc<F: FnMut(ByteSize, &mut [u8]) -> Result<()>, CB: FnMut
 }
 
 /// Raw partition structure
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 #[repr(C)]
 pub struct RawPartition {
     /// Defines the type of this partition
@@ -72,16 +76,16 @@ pub struct RawPartition {
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub struct Partition {
     /// Defines the type of this partition
-    partition_type_guid: Uuid,
+    partition_type: Uuid,
 
     /// Unique identifer for this partition
-    partition_guid: Uuid,
+    guid: Uuid,
 
     /// Where it starts on disk
-    starting_lba: LogicalBlockAddress,
+    start: LogicalBlockAddress,
 
     /// Where it ends on disk
-    ending_lba: LogicalBlockAddress,
+    end: LogicalBlockAddress,
 
     /// Attributes
     // TODO: Bitflags
@@ -89,6 +93,40 @@ pub struct Partition {
 
     /// Null-terminated name, UCS-2/UTF-16LE string,
     name: GenericArray<u16, U36>,
+}
+
+impl Partition {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn from_bytes(source: &[u8]) -> Self {
+        #[allow(clippy::cast_ptr_alignment)]
+        let part = unsafe { (source.as_ptr() as *const RawPartition).read_unaligned() };
+        Partition {
+            partition_type: uuid_hack(part.partition_type_guid),
+            guid: uuid_hack(part.partition_guid),
+            start: part.starting_lba,
+            end: part.ending_lba,
+            attributes: part.attributes,
+            name: part.name,
+        }
+    }
+
+    pub fn to_bytes(&self, dest: &mut [u8]) {
+        let mut raw = RawPartition::default();
+        raw.partition_type_guid = *uuid_hack(*self.partition_type.as_bytes()).as_bytes();
+        raw.partition_guid = *uuid_hack(*self.guid.as_bytes()).as_bytes();
+        raw.starting_lba = self.start;
+        raw.ending_lba = self.end;
+        raw.attributes = self.attributes;
+        raw.name = self.name;
+        //
+        let raw = &raw as *const RawPartition as *const u8;
+        // Safe because we know the sizes
+        let raw = unsafe { slice::from_raw_parts(raw, mem::size_of::<RawPartition>()) };
+        dest[..mem::size_of::<RawPartition>()].copy_from_slice(raw);
+    }
 }
 
 #[cfg(test)]

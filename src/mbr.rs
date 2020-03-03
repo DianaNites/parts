@@ -30,6 +30,8 @@ pub enum MbrError {
 
 type Result<T, E = MbrError> = core::result::Result<T, E>;
 
+pub const MBR_SIZE: usize = 512;
+
 /// GPT Protective MBR
 #[derive(PartialEq, Copy, Clone)]
 #[repr(C, packed)]
@@ -263,7 +265,7 @@ mod tests {
     use static_assertions::*;
 
     assert_eq_size!(MbrPart, [u8; 16]);
-    assert_eq_size!(ProtectiveMbr, [u8; 512]);
+    assert_eq_size!(ProtectiveMbr, [u8; MBR_SIZE]);
 
     /// Basic reading should work and validate correctly.
     #[test]

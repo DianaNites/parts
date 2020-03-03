@@ -6,6 +6,7 @@ use std::io::{prelude::*, SeekFrom};
 #[cfg(feature = "std")]
 use thiserror::Error;
 
+mod error;
 mod header;
 mod partition;
 mod raw;
