@@ -1,40 +1,21 @@
 //! A Pure Rust library for working with GPT partition tables.
 //!
-//! This crate handles most, if not all, aspects of working with GPT for you.
-//!
 //! The primary type for interacting the a GPT table is [`Gpt`].
 //! From here you can add and remove partitions.
 //!
-//! A Valid GPT partition consists of a MBR, and two GPT header/partition array
-//! pairs.
-//!
-//! This library will not accept invalid GPT partitions,
-//! but does allow you to repair corrupt labels.
-//!
-//! Note that corrupt and invalid labels are not the same thing.
-//!
-//! Corrupt labels have an invalid primary OR backup header, but not both.
-//!
 //! # Usage
 //!
-//! Open a disk image file and add a partition.
+//! List all partitions
 //!
 //! ```rust,ignore
-//! use parts::{Gpt, GptPartBuilder, types::*};
-//! use std::fs::File;
+//! # use parts::{Gpt, types::*};
+//! # use std::fs::File;
+//! # use std::error::Error;
 //!
-//! const PATH: &str = "tests/data/test_parts";
-//! // A reasonable-ish default size.
-//! const BLOCK_SIZE: BlockSize = BlockSize(512);
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let mut gpt = Gpt::from_reader(File::open(PATH)?, BLOCK_SIZE)?;
-//! let part = GptPartBuilder::new(BLOCK_SIZE)
-//!     .name("Example")
-//!     .size((BLOCK_SIZE * 2).into())
-//!     .start(34.into())
-//!     .finish();
-//! gpt.add_partition(part);
+//! # fn main() -> Result<(), Box<dyn Error>> {
+//! # let image = File::open("tests/data/test_parts_cf")?;
+//! # let disk_size = ByteSize::from_bytes(10_485_760);
+//! let mut gpt = Gpt::from_reader(image, BlockSize(512), disk_size)?;
 //! #
 //! # Ok(())
 //! # }
