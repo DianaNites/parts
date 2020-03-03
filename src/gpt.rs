@@ -612,10 +612,6 @@ mod tests {
     use std::io::Cursor;
     use uuid::Uuid;
 
-    // Strictly speaking it should be 92, but should be fine
-    // since we only depend on the first 92 bytes, and the rest is padding.
-    // assert_eq_size!(GptHeader, [u8; 96]);
-
     /// Tests that we can read an external GPT layout,
     /// serialize it, and deserialize it again, with it staying the same.
     #[test]

@@ -19,7 +19,7 @@
 //!
 //! Open a disk image file and add a partition.
 //!
-//! ```rust
+//! ```rust,ignore
 //! use parts::{Gpt, GptPartBuilder, types::*};
 //! use std::fs::File;
 //!
