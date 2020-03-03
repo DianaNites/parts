@@ -10,6 +10,10 @@ use generic_array::{
     ArrayLength,
     GenericArray,
 };
+#[cfg(any(feature = "std", test))]
+use std::io::prelude::*;
+#[cfg(any(feature = "std", test))]
+use std::io::SeekFrom;
 use uuid::Uuid;
 
 fn validate<F: FnMut(ByteSize, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])>(
@@ -117,8 +121,32 @@ impl Gpt {
     /// - The backup header array
     /// - The primary header
     /// - The primary header array
-    pub fn to_bytes<F: FnMut(ByteSize, &[u8]) -> Result<()>>(&self) {
-        //
+    pub fn to_bytes<F: FnMut(ByteSize, &[u8]) -> Result<()>>(
+        &self,
+        func: F,
+        block_size: BlockSize,
+        disk_size: ByteSize,
+    ) -> Result<()> {
+        self.to_bytes_with_size(func, block_size, disk_size)
+    }
+
+    #[cfg(any(feature = "std", test))]
+    pub fn from_reader<RS: Read + Seek>(
+        source: RS,
+        block_size: BlockSize,
+        disk_size: ByteSize,
+    ) -> Result<Self> {
+        Gpt::from_reader_with_size(source, block_size, disk_size)
+    }
+
+    #[cfg(any(feature = "std", test))]
+    pub fn to_writer<WS: Write + Seek>(
+        &self,
+        dest: WS,
+        block_size: BlockSize,
+        disk_size: ByteSize,
+    ) -> Result<()> {
+        self.to_writer_with_size(dest, block_size, disk_size)
     }
 }
 
@@ -183,6 +211,8 @@ where
     /// Like [`Gpt::to_bytes`] but stores `N` partitions.
     ///
     /// See [`Gpt::from_bytes_with_size`] for more details.
+    // TODO: When partition validity checks are done, they'll need to be rechecked
+    // here. Make sure all partitions are within disk_size/usable blocks
     pub fn to_bytes_with_size<F: FnMut(ByteSize, &[u8]) -> Result<()>>(
         &self,
         mut func: F,
@@ -254,6 +284,53 @@ where
         }
         Ok(())
     }
+
+    ///
+    #[cfg(any(feature = "std", test))]
+    pub fn from_reader_with_size<RS: Read + Seek>(
+        mut source: RS,
+        block_size: BlockSize,
+        disk_size: ByteSize,
+    ) -> Result<Self> {
+        let last_lba = (disk_size / block_size) - 1;
+        let mut primary = vec![0; block_size.0 as usize * 2];
+        let mut alt = vec![0; block_size.0 as usize];
+        source.read_exact(&mut primary)?;
+        source.seek(SeekFrom::Start((last_lba * block_size).as_bytes()))?;
+        source.read_exact(&mut alt)?;
+        let gpt = Gpt::from_bytes_with_size(
+            &primary,
+            &alt,
+            |i, buf| {
+                source.seek(SeekFrom::Start(i.as_bytes()))?;
+                source.read_exact(buf)?;
+                Ok(())
+            },
+            block_size,
+            disk_size,
+        )?;
+        Ok(gpt)
+    }
+
+    ///
+    #[cfg(any(feature = "std", test))]
+    pub fn to_writer_with_size<WS: Write + Seek>(
+        &self,
+        mut dest: WS,
+        block_size: BlockSize,
+        disk_size: ByteSize,
+    ) -> Result<()> {
+        self.to_bytes_with_size(
+            |i, buf| {
+                dest.seek(SeekFrom::Start(i.as_bytes()))?;
+                dest.write_all(buf)?;
+                Ok(())
+            },
+            block_size,
+            disk_size,
+        )?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -265,6 +342,7 @@ mod tests {
         ArrayLength,
     };
     use static_assertions::*;
+    use std::io::Cursor;
 
     assert_eq_size!(RawPartition, [u8; PARTITION_ENTRY_SIZE as usize]);
 
@@ -344,6 +422,22 @@ mod tests {
         let mut raw = data().unwrap();
         raw[512..][..512].copy_from_slice(&[0; 512]);
         let _gpt = read_gpt_size::<U128>(&raw).unwrap();
+    }
+
+    /// Test that the from_reader/to_writer methods work correctly
+    #[test]
+    fn std_gpt_test() -> Result {
+        let raw = data()?;
+        let raw = Cursor::new(raw);
+        let gpt = Gpt::from_reader(raw, BLOCK_SIZE, ByteSize::from_bytes(TEN_MIB_BYTES as u64))?;
+        // FIXME: Duplicate of `read_gpt`? Keep in sync? Extract function?
+        assert_eq!(
+            gpt.partitions[0].uuid(),
+            Uuid::parse_str(CF_PART_GUID).unwrap()
+        );
+        assert_eq!(gpt.uuid, Uuid::parse_str(CF_DISK_GUID).unwrap());
+        //
+        Ok(())
     }
 
     /// Don't panic on slice indexing if given an empty slice?
