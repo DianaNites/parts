@@ -15,9 +15,6 @@ use uuid::Uuid;
 /// partitions
 pub const MIN_PARTITIONS_BYTES: u64 = 16384;
 
-/// Supported max partitions.
-const MAX_PARTITIONS: usize = (MIN_PARTITIONS_BYTES / PARTITION_ENTRY_SIZE as u64) as usize;
-
 /// Calculate partition crc32
 ///
 /// See [`Gpt::from_bytes`] for details.

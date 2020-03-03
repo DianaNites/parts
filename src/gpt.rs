@@ -35,8 +35,6 @@ pub enum NewGptError {
     Unknown,
 }
 
-type Result<T, E = NewGptError> = core::result::Result<T, E>;
-
 /// A GPT Disk
 ///
 ///
