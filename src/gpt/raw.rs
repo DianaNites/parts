@@ -62,6 +62,28 @@ fn validate<F: FnMut(ByteSize, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])
     Ok(())
 }
 
+/// Represents a GUID Partition Table
+///
+/// Note that all modifications are done in-memory
+/// and *only* effect partition entries, not the data in them.
+///
+/// # Memory
+///
+/// By default this takes `16KiB + 24 bytes` of space.
+/// The UEFI spec requires a minimum of 16KiB reserved for partitions,
+/// which is 128 partitions if each entry is 128 bytes,
+/// which we assume by default.
+///
+/// If you are particularly space-constrained, or need to support more,
+/// you can use [`crate::typenum`] to set the `N` generic parameter to
+/// the number of partitions you want to support.
+///
+/// When doing this unsupported partitions will ***not*** be preserved,
+/// and depending on `N`, and what you do, may be overwritten by
+/// newly added partitions.
+///
+/// Regardless of `N`, when reading the full partition array *is* still
+/// validated.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Gpt<N = U128>
 where
@@ -71,6 +93,9 @@ where
 {
     uuid: Uuid,
     partitions: GenericArray<Partition, N>,
+    /// Real size of the partitions array.
+    /// u64, not u32, for alignment reasons.
+    partitions_len: u64,
 }
 
 impl Gpt {
@@ -188,6 +213,11 @@ where
 
         Ok(Gpt {
             uuid: primary.uuid,
+            // Only count used partitions.
+            partitions_len: partitions
+                .iter()
+                .filter(|p| **p != Partition::default())
+                .count() as u64,
             partitions,
         })
     }
@@ -212,7 +242,6 @@ where
         //
         let mut header_buf = [0; HEADER_SIZE as usize];
         let mut partition_buf = [0; PARTITION_ENTRY_SIZE as usize];
-        let mut parts = 0;
         let mut digest = crc32::Digest::new(crc32::IEEE);
         for part in self
             .partitions
@@ -221,7 +250,6 @@ where
         {
             part.to_bytes(&mut partition_buf);
             digest.write(&partition_buf);
-            parts += 1;
         }
         let parts_crc = digest.sum32();
         let disk_uuid = self.uuid;
@@ -229,7 +257,7 @@ where
         let alt = Header::new(
             last_lba,
             LogicalBlockAddress(1),
-            parts,
+            self.partitions_len as u32,
             parts_crc,
             disk_uuid,
             block_size,
@@ -252,7 +280,7 @@ where
         let primary = Header::new(
             LogicalBlockAddress(1),
             last_lba,
-            parts,
+            self.partitions_len as u32,
             parts_crc,
             disk_uuid,
             block_size,
@@ -334,29 +362,39 @@ where
 
     /// Slice of in-use partitions
     pub fn partitions(&self) -> &[Partition] {
-        let len = self
-            .partitions
-            .iter()
-            .filter(|p| **p != Partition::default())
-            .count();
+        let len = core::cmp::min(self.partitions_len as usize, self.partitions.len());
         &self.partitions[..len]
     }
 
     /// Mutable slice of in-use partitions.
     pub fn partitions_mut(&mut self) -> &mut [Partition] {
-        let len = self
-            .partitions
-            .iter()
-            .filter(|p| **p != Partition::default())
-            .count();
+        let len = core::cmp::min(self.partitions_len as usize, self.partitions.len());
         &mut self.partitions[..len]
     }
+
+    ///
+    pub fn add_partition(&mut self, part: Partition) -> Result<()> {
+        let len = core::cmp::min(self.partitions_len as usize, self.partitions.len());
+        // TODO: Check that `part` doesn't overlap with any existing.
+        self.partitions_mut()[len] = part;
+        self.partitions_len += 1;
+        Ok(())
+    }
+
+    ///
+    pub fn remove_partition(&mut self, index: usize) {
+        self.partitions_mut()[index] = Partition::default();
+        self.partitions_len -= 1;
+    }
+
+    // TODO: First/last usable block getters, and remaining. Store disk/block size?
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::util::{Result, *};
+    use core::mem;
     use generic_array::{
         typenum::{Unsigned, U0, U128, U256, U64},
         ArrayLength,
@@ -365,6 +403,10 @@ mod tests {
     use std::io::Cursor;
 
     assert_eq_size!(RawPartition, [u8; PARTITION_ENTRY_SIZE as usize]);
+    assert_eq_size!(
+        Gpt,
+        [u8; MIN_PARTITIONS_BYTES as usize + mem::size_of::<[u8; 16]>() + mem::size_of::<u64>()]
+    );
 
     fn read_gpt_size<N>(raw: &[u8]) -> Result<Gpt<N>>
     where
@@ -466,5 +508,27 @@ mod tests {
     #[ignore]
     fn empty_bytes_regress() {
         read_gpt_size::<U128>(&[]).unwrap();
+    }
+
+    /// Make sure that if a `Gpt<U0>` is written to a device with 1 partition,
+    /// that the partition destroyed/ignored.
+    /// Basically it should output a valid GPT Header
+    #[test]
+    fn destroy_unsupported_partitions() -> Result {
+        let mut raw = data()?;
+        let zero_gpt = read_gpt_size::<U0>(&raw)?;
+        zero_gpt.to_bytes_with_size(
+            |i, buf| {
+                let i = i.as_bytes() as usize;
+                raw[i..][..buf.len()].copy_from_slice(buf);
+                Ok(())
+            },
+            BLOCK_SIZE,
+            ByteSize::from_bytes(TEN_MIB_BYTES as u64),
+        )?;
+        let gpt = read_gpt_size::<U128>(&raw)?;
+        assert_eq!(gpt.partitions().len(), 0);
+        //
+        Ok(())
     }
 }
