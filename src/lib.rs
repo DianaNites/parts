@@ -54,4 +54,9 @@ pub mod types;
 
 pub use gpt::*;
 pub use partitions::*;
+
+// Re-exports
+#[doc(inline)]
+pub use generic_array::typenum;
+#[doc(inline)]
 pub use uuid;
