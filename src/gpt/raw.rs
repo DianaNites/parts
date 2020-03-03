@@ -403,6 +403,16 @@ mod tests {
         Ok(gpt)
     }
 
+    /// Confirm the GPT has what we expect
+    fn expected_gpt(gpt: Gpt) {
+        assert_eq!(gpt.partitions().len(), 1);
+        assert_eq!(
+            gpt.partitions()[0].uuid(),
+            Uuid::parse_str(CF_PART_GUID).unwrap()
+        );
+        assert_eq!(gpt.uuid, Uuid::parse_str(CF_DISK_GUID).unwrap());
+    }
+
     /// Test that we can read a GPT from another tool
     #[test]
     fn read_gpt() -> Result {
@@ -412,12 +422,7 @@ mod tests {
         read_gpt_size::<U64>(&raw)?;
         read_gpt_size::<U256>(&raw)?;
         //
-        assert_eq!(gpt.partitions().len(), 1);
-        assert_eq!(
-            gpt.partitions()[0].uuid(),
-            Uuid::parse_str(CF_PART_GUID).unwrap()
-        );
-        assert_eq!(gpt.uuid, Uuid::parse_str(CF_DISK_GUID).unwrap());
+        expected_gpt(gpt);
         //
         Ok(())
     }
@@ -462,13 +467,7 @@ mod tests {
         let raw = data()?;
         let raw = Cursor::new(raw);
         let gpt = Gpt::from_reader(raw, BLOCK_SIZE, ByteSize::from_bytes(TEN_MIB_BYTES as u64))?;
-        // FIXME: Duplicate of `read_gpt`? Keep in sync? Extract function?
-        assert_eq!(gpt.partitions().len(), 1);
-        assert_eq!(
-            gpt.partitions()[0].uuid(),
-            Uuid::parse_str(CF_PART_GUID).unwrap()
-        );
-        assert_eq!(gpt.uuid, Uuid::parse_str(CF_DISK_GUID).unwrap());
+        expected_gpt(gpt);
         //
         Ok(())
     }
