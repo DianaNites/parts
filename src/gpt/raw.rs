@@ -333,6 +333,37 @@ where
     }
 }
 
+impl<N> Gpt<N>
+where
+    N: Unsigned,
+    N: ArrayLength<Partition>,
+    N::ArrayType: Copy,
+{
+    pub fn uuid(&self) -> Uuid {
+        self.uuid
+    }
+
+    /// Slice of in-use partitions
+    pub fn partitions(&self) -> &[Partition] {
+        let len = self
+            .partitions
+            .iter()
+            .filter(|p| **p != Partition::default())
+            .count();
+        &self.partitions[..len]
+    }
+
+    /// Mutable slice of in-use partitions.
+    pub fn partitions_mut(&mut self) -> &mut [Partition] {
+        let len = self
+            .partitions
+            .iter()
+            .filter(|p| **p != Partition::default())
+            .count();
+        &mut self.partitions[..len]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -381,8 +412,9 @@ mod tests {
         read_gpt_size::<U64>(&raw)?;
         read_gpt_size::<U256>(&raw)?;
         //
+        assert_eq!(gpt.partitions().len(), 1);
         assert_eq!(
-            gpt.partitions[0].uuid(),
+            gpt.partitions()[0].uuid(),
             Uuid::parse_str(CF_PART_GUID).unwrap()
         );
         assert_eq!(gpt.uuid, Uuid::parse_str(CF_DISK_GUID).unwrap());
@@ -431,8 +463,9 @@ mod tests {
         let raw = Cursor::new(raw);
         let gpt = Gpt::from_reader(raw, BLOCK_SIZE, ByteSize::from_bytes(TEN_MIB_BYTES as u64))?;
         // FIXME: Duplicate of `read_gpt`? Keep in sync? Extract function?
+        assert_eq!(gpt.partitions().len(), 1);
         assert_eq!(
-            gpt.partitions[0].uuid(),
+            gpt.partitions()[0].uuid(),
             Uuid::parse_str(CF_PART_GUID).unwrap()
         );
         assert_eq!(gpt.uuid, Uuid::parse_str(CF_DISK_GUID).unwrap());

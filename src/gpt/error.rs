@@ -10,7 +10,7 @@ use thiserror::Error;
 #[cfg_attr(any(feature = "std", test), derive(Error))]
 #[non_exhaustive]
 pub enum Error {
-    /// I/O Error: {0}
+    /// I/O Error
     #[cfg(any(feature = "std", test))]
     Io(#[from] std::io::Error),
 
