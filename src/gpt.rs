@@ -199,7 +199,7 @@ where
             // Only count used partitions.
             partitions_len: partitions
                 .iter()
-                .filter(|p| **p != Partition::default())
+                .filter(|p| **p != Partition::new())
                 .count() as u64,
             partitions,
         })
@@ -229,7 +229,7 @@ where
         for part in self
             .partitions
             .into_iter()
-            .filter(|p| *p != Partition::default())
+            .filter(|p| *p != Partition::new())
         {
             part.to_bytes(&mut partition_buf);
             digest.write(&partition_buf);
@@ -251,7 +251,7 @@ where
         for (i, part) in self
             .partitions
             .into_iter()
-            .filter(|p| *p != Partition::default())
+            .filter(|p| *p != Partition::new())
             .enumerate()
         {
             part.to_bytes(&mut partition_buf);
@@ -274,7 +274,7 @@ where
         for (i, part) in self
             .partitions
             .into_iter()
-            .filter(|p| *p != Partition::default())
+            .filter(|p| *p != Partition::new())
             .enumerate()
         {
             part.to_bytes(&mut partition_buf);
@@ -393,7 +393,7 @@ where
 
     /// Remove the partition at `index`.
     pub fn remove_partition(&mut self, index: usize) {
-        self.partitions_mut()[index] = Partition::default();
+        self.partitions_mut()[index] = Partition::new();
         self.partitions_len -= 1;
     }
 
