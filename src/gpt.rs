@@ -289,12 +289,7 @@ where
 }
 
 #[cfg(any(feature = "std", test))]
-impl<N> Gpt<N>
-where
-    N: Unsigned,
-    N: ArrayLength<Partition>,
-    N::ArrayType: Copy,
-{
+impl Gpt {
     ///
     pub fn from_reader<RS: Read + Seek>(
         source: RS,
@@ -313,7 +308,15 @@ where
     ) -> Result<()> {
         self.to_writer_with_size(dest, block_size, disk_size)
     }
+}
 
+#[cfg(any(feature = "std", test))]
+impl<N> Gpt<N>
+where
+    N: Unsigned,
+    N: ArrayLength<Partition>,
+    N::ArrayType: Copy,
+{
     ///
     pub fn from_reader_with_size<RS: Read + Seek>(
         mut source: RS,
