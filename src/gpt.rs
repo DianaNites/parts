@@ -91,8 +91,7 @@ fn validate<F: FnMut(ByteSize, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Gpt<N = U128>
 where
-    N: Unsigned,
-    N: ArrayLength<Partition>,
+    N: ArrayLength<Partition> + Unsigned,
     N::ArrayType: Copy,
 {
     uuid: Uuid,
@@ -157,8 +156,7 @@ impl Gpt {
 
 impl<N> Gpt<N>
 where
-    N: Unsigned,
-    N: ArrayLength<Partition>,
+    N: ArrayLength<Partition> + Unsigned,
     N::ArrayType: Copy,
 {
     /// Like [`Gpt::from_bytes`] but stores `N` partitions
@@ -313,8 +311,7 @@ impl Gpt {
 #[cfg(any(feature = "std", test))]
 impl<N> Gpt<N>
 where
-    N: Unsigned,
-    N: ArrayLength<Partition>,
+    N: ArrayLength<Partition> + Unsigned,
     N::ArrayType: Copy,
 {
     ///
@@ -365,8 +362,7 @@ where
 
 impl<N> Gpt<N>
 where
-    N: Unsigned,
-    N: ArrayLength<Partition>,
+    N: ArrayLength<Partition> + Unsigned,
     N::ArrayType: Copy,
 {
     /// Disk UUID
