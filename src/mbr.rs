@@ -1,9 +1,6 @@
 //! MBR definitions
 use crate::types::*;
-use core::{
-    convert::{TryFrom, TryInto},
-    mem::size_of,
-};
+use core::{convert::TryFrom, mem::size_of};
 use displaydoc::Display;
 use generic_array::{typenum::U440, GenericArray};
 #[cfg(any(feature = "std", test))]
@@ -17,9 +14,6 @@ pub enum MbrError {
 
     /// Not a GUID Partition Table, MBR has real partitions.
     NotGpt,
-
-    /// The argument {0} was invalid: {1}
-    InvalidArgument(&'static str, &'static str),
 }
 
 type Result<T, E = MbrError> = core::result::Result<T, E>;
@@ -87,56 +81,31 @@ impl ProtectiveMbr {
     ///
     /// # Errors
     ///
-    /// - If `source` is not at least `block_size` bytes.
     /// - If the MBR is invalid
     ///
-    /// # Details
+    /// # Panics
     ///
-    /// On success, this will have read exactly `block_size` bytes.
-    ///
-    /// On error, the amount read is unspecified.
-    pub fn from_bytes(source: &mut &[u8], block_size: BlockSize) -> Result<Self> {
-        let block_size = block_size.0.try_into().unwrap();
-        if source.len() < block_size {
-            return Err(MbrError::InvalidArgument(
-                "source",
-                "Not enough data for MBR",
-            ));
-        }
+    /// - If `source` is not `MBR_SIZE` bytes.
+    pub fn from_bytes(source: &[u8]) -> Result<Self> {
+        assert_eq!(source.len(), MBR_SIZE, "Invalid source");
         // Safe because ProtectiveMbr is simple and repr(C, packed),
         // any value is valid, and we check the size of `source` above.
-        let mbr = unsafe {
-            (source[..size_of::<ProtectiveMbr>()].as_ptr() as *const ProtectiveMbr).read_unaligned()
-        };
+        let mbr = unsafe { (source.as_ptr() as *const ProtectiveMbr).read_unaligned() };
         let mbr = mbr.validate()?;
-        *source = &source[block_size..];
         Ok(mbr)
     }
 
     /// Write a GPT Protective MBR to `dest`
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// - If `dest` is not at least `block_size` bytes
-    ///
-    /// # Details
-    ///
-    /// On success, exactly `block_size` bytes will have been written to `dest`.
-    ///
-    /// On error, `dest` is unchanged.
-    pub fn write_bytes(&mut self, dest: &mut [u8], block_size: BlockSize) -> Result<()> {
-        let block_size = block_size.0.try_into().unwrap();
-        if dest.len() < block_size {
-            return Err(MbrError::InvalidArgument(
-                "dest",
-                "Not enough space for MBR",
-            ));
-        }
+    /// - If `dest` is not `block_size` bytes
+    pub fn to_bytes(&self, dest: &mut [u8]) {
+        assert_eq!(dest.len(), MBR_SIZE, "Invalid dest");
         let raw = self as *const ProtectiveMbr as *const u8;
         // Safe because we know the sizes
         let raw = unsafe { core::slice::from_raw_parts(raw, size_of::<ProtectiveMbr>()) };
-        dest[..MBR_SIZE].copy_from_slice(raw);
-        Ok(())
+        dest.copy_from_slice(raw);
     }
 }
 
@@ -146,7 +115,7 @@ impl ProtectiveMbr {
     ///
     /// # Errors
     ///
-    /// The MBR is considered invalid if:
+    /// The MBR is considered invalid if any of the following are true:
     ///
     /// - The signature is not correct
     /// - The GPT Protective partition is missing
@@ -224,7 +193,7 @@ mod tests {
     #[test]
     fn read_test() -> Result {
         let data = data()?;
-        let _mbr = ProtectiveMbr::from_bytes(&mut &data[..], BLOCK_SIZE)?;
+        let _mbr = ProtectiveMbr::from_bytes(&data[..MBR_SIZE])?;
         Ok(())
     }
 }

@@ -165,7 +165,7 @@ where
     /// You probably don't want this method, but it can be useful
     /// if you're fine with only supporting a few partitions.
     pub fn from_bytes_with_size<F: FnMut(ByteSize, &mut [u8]) -> Result<()>>(
-        mut primary: &[u8],
+        primary: &[u8],
         mut alt: &[u8],
         mut func: F,
         block_size: BlockSize,
@@ -175,9 +175,9 @@ where
         assert_eq!(primary.len(), b_size * 2, "Invalid primary");
         assert_eq!(alt.len(), b_size, "Invalid alt");
         //
-        let _mbr = ProtectiveMbr::from_bytes(&mut primary, block_size)
+        let _mbr = ProtectiveMbr::from_bytes(&primary[..MBR_SIZE])
             .map_err(|_| Error::Invalid("Invalid Protective MBR"))?;
-        let primary = Header::from_bytes(&mut primary, block_size)?;
+        let primary = Header::from_bytes(&mut &primary[MBR_SIZE..], block_size)?;
         let alt = Header::from_bytes(&mut alt, block_size)?;
         //
         let mut partitions: GenericArray<Partition, _> = Default::default();
@@ -217,10 +217,9 @@ where
         disk_size: ByteSize,
     ) -> Result<()> {
         let last_lba = (disk_size / block_size) - 1;
-        let mut mbr = ProtectiveMbr::new(last_lba);
+        let mbr = ProtectiveMbr::new(last_lba);
         let mut mbr_buf = [0; MBR_SIZE];
-        mbr.write_bytes(&mut mbr_buf, block_size)
-            .map_err(|_| Error::Invalid("Couldn't write protective MBR"))?;
+        mbr.to_bytes(&mut mbr_buf);
         func(ByteSize::from_bytes(0), &mbr_buf)?;
         //
         let mut header_buf = [0; HEADER_SIZE as usize];
