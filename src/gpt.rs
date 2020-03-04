@@ -437,7 +437,8 @@ mod tests {
             },
             BLOCK_SIZE,
             ByteSize::from_bytes(TEN_MIB_BYTES as u64),
-        )?;
+        )
+        .map_err(anyhow::Error::msg)?;
         //
         Ok(gpt)
     }
@@ -479,7 +480,8 @@ mod tests {
             },
             BLOCK_SIZE,
             ByteSize::from_bytes(TEN_MIB_BYTES as u64),
-        )?;
+        )
+        .map_err(anyhow::Error::msg)?;
         let new_gpt = read_gpt_size::<U128>(&dest)?;
         assert_eq!(new_gpt, gpt);
         Ok(())
@@ -526,15 +528,17 @@ mod tests {
     fn destroy_unsupported_partitions() -> Result {
         let mut raw = data()?;
         let zero_gpt = read_gpt_size::<U0>(&raw)?;
-        zero_gpt.to_bytes_with_size(
-            |i, buf| {
-                let i = i.as_bytes() as usize;
-                raw[i..][..buf.len()].copy_from_slice(buf);
-                Ok(())
-            },
-            BLOCK_SIZE,
-            ByteSize::from_bytes(TEN_MIB_BYTES as u64),
-        )?;
+        zero_gpt
+            .to_bytes_with_size(
+                |i, buf| {
+                    let i = i.as_bytes() as usize;
+                    raw[i..][..buf.len()].copy_from_slice(buf);
+                    Ok(())
+                },
+                BLOCK_SIZE,
+                ByteSize::from_bytes(TEN_MIB_BYTES as u64),
+            )
+            .map_err(anyhow::Error::msg)?;
         let gpt = read_gpt_size::<U128>(&raw)?;
         assert_eq!(gpt.partitions().len(), 0);
         //

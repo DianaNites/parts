@@ -287,7 +287,7 @@ mod tests {
     #[test]
     fn read_write_header() -> Result {
         let raw = &data()?[BLOCK_SIZE.0 as usize..][..BLOCK_SIZE.0 as usize];
-        let header = Header::from_bytes(raw, BLOCK_SIZE)?;
+        let header = Header::from_bytes(raw, BLOCK_SIZE).map_err(anyhow::Error::msg)?;
         assert_eq!(
             header.uuid,
             Uuid::parse_str(CF_DISK_GUID).unwrap(),
@@ -308,7 +308,7 @@ mod tests {
     #[test]
     fn read_write_large_header() -> Result {
         let raw = &data()?[BLOCK_SIZE.0 as usize..][..BLOCK_SIZE.0 as usize];
-        let header = Header::from_bytes(raw, BLOCK_SIZE)?;
+        let header = Header::from_bytes(raw, BLOCK_SIZE).map_err(anyhow::Error::msg)?;
         assert_eq!(
             header.uuid,
             Uuid::parse_str(CF_DISK_GUID).unwrap(),
