@@ -8,7 +8,7 @@ use thiserror::Error;
 
 #[derive(Debug, Display)]
 #[cfg_attr(any(feature = "std", test), derive(Error))]
-pub enum MbrError {
+pub enum Error {
     /// The MBR was invalid: {0}
     InvalidMbr(&'static str),
 
@@ -16,7 +16,7 @@ pub enum MbrError {
     NotGpt,
 }
 
-type Result<T, E = MbrError> = core::result::Result<T, E>;
+type Result<T, E = Error> = core::result::Result<T, E>;
 
 pub const MBR_SIZE: usize = 512;
 
@@ -119,23 +119,20 @@ impl ProtectiveMbr {
     ///
     /// - The signature is not correct
     /// - The GPT Protective partition is missing
-    /// - If other partitions exist. In this case the error is
-    ///   [`MbrError::NotGpt`]
+    /// - If other partitions exist. In this case the error is [`Error::NotGpt`]
     fn validate(self) -> Result<Self> {
         if self.signature != 0xAA55 {
-            return Err(MbrError::InvalidMbr(
-                "MBR signature invalid. Expected 0xAA55",
-            ));
+            return Err(Error::InvalidMbr("MBR signature invalid. Expected 0xAA55"));
         }
         let part: MbrPart = self.partitions[0];
         if part.os_type != 0xEE {
-            return Err(MbrError::InvalidMbr("Missing GPT Protective Partition"));
+            return Err(Error::InvalidMbr("Missing GPT Protective Partition"));
         }
 
         let parts = self.partitions;
         for part in &parts[1..] {
             if *part != MbrPart::default() {
-                return Err(MbrError::NotGpt);
+                return Err(Error::NotGpt);
             }
         }
         Ok(self)
