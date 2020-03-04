@@ -79,6 +79,9 @@ pub struct RawPartition {
 ///
 /// TODO: List all partitions on a device
 // FIXME: Default is not a valid partition, this is public API, don't derive it.
+// We can't fix that until [#91][1] is fixed though
+// Maybe `mem::zeroed`?
+// [1]: https://github.com/fizyk20/generic-array/issues/91
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub struct Partition {
     /// Defines the type of this partition
