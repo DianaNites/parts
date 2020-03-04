@@ -22,6 +22,7 @@
 //! # let disk_size = ByteSize::from_bytes(10_485_760);
 //! let mut gpt = Gpt::from_reader(image, BlockSize(512), disk_size)?;
 //! for part in gpt.partitions() {
+//!     println!("Partition Name: {}", part.name());
 //!     println!("Partition UUID: {}", part.uuid());
 //! }
 //! #
