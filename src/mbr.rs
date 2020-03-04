@@ -7,17 +7,11 @@ use core::{
 use displaydoc::Display;
 use generic_array::{typenum::U440, GenericArray};
 #[cfg(any(feature = "std", test))]
-use std::io::prelude::*;
-#[cfg(any(feature = "std", test))]
 use thiserror::Error;
 
 #[derive(Debug, Display)]
 #[cfg_attr(any(feature = "std", test), derive(Error))]
 pub enum MbrError {
-    #[cfg(any(feature = "std", test))]
-    /// Reading or writing the MBR failed.
-    Io(#[from] std::io::Error),
-
     /// The MBR was invalid: {0}
     InvalidMbr(&'static str),
 
@@ -119,27 +113,6 @@ impl ProtectiveMbr {
         Ok(mbr)
     }
 
-    /// Read a `ProtectiveMbr` from a `Read`er.
-    ///
-    /// # Errors
-    ///
-    /// - If the `Read`er errors.
-    /// - If the MBR is invalid.
-    ///
-    /// # Details
-    ///
-    /// On success, this will have read exactly `block_size` bytes.
-    ///
-    /// On error, the amount read is unspecified.
-    #[cfg(any(feature = "std", test))]
-    pub fn from_reader<R: Read>(mut source: R, block_size: BlockSize) -> Result<Self> {
-        let b_size = block_size.0.try_into().unwrap();
-        let mut data = vec![0; b_size];
-        source.read_exact(&mut data)?;
-        //
-        Self::from_bytes(&mut data.as_slice(), block_size)
-    }
-
     /// Write a GPT Protective MBR to `dest`
     ///
     /// # Errors
@@ -163,26 +136,6 @@ impl ProtectiveMbr {
         // Safe because we know the sizes
         let raw = unsafe { core::slice::from_raw_parts(raw, size_of::<ProtectiveMbr>()) };
         dest[..block_size].copy_from_slice(raw);
-        Ok(())
-    }
-
-    /// Write a GPT Protective MBR to a `Write`r.
-    ///
-    /// # Errors
-    ///
-    /// - If the `Write`r does.
-    ///
-    /// # Details
-    ///
-    /// On success, this will have written exactly `block_size` bytes.
-    ///
-    /// On error, the amount written is unspecified.
-    #[cfg(any(feature = "std", test))]
-    pub fn write<W: Write>(&mut self, mut dest: W, block_size: BlockSize) -> Result<()> {
-        let b_size = block_size.0.try_into().unwrap();
-        let mut data = vec![0; b_size];
-        self.write_bytes(&mut data, block_size)?;
-        dest.write_all(&data)?;
         Ok(())
     }
 }
@@ -271,7 +224,7 @@ mod tests {
     #[test]
     fn read_test() -> Result {
         let data = data()?;
-        let _mbr = ProtectiveMbr::from_reader(&data[..], BLOCK_SIZE)?;
+        let _mbr = ProtectiveMbr::from_bytes(&mut &data[..], BLOCK_SIZE)?;
         Ok(())
     }
 }
