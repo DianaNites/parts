@@ -9,9 +9,14 @@
 //!
 //! ```rust
 //! # use parts::{Gpt, types::*};
+//! # #[cfg(feature = "std")]
 //! # use std::fs::File;
+//! # #[cfg(feature = "std")]
 //! # use std::error::Error;
 //!
+//! # #[cfg(not(feature = "std"))]
+//! fn main() {}
+//! # #[cfg(feature = "std")]
 //! # fn main() -> Result<(), Box<dyn Error>> {
 //! # let image = File::open("tests/data/test_parts_cf")?;
 //! # let disk_size = ByteSize::from_bytes(10_485_760);
