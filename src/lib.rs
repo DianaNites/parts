@@ -31,7 +31,6 @@
 //! ```
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 #![deny(missing_docs)]
-#![cfg_attr(feature = "nightly", feature(doc_cfg))]
 
 #[cfg(test)]
 mod util;
