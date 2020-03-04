@@ -85,7 +85,7 @@ impl ProtectiveMbr {
     ///
     /// # Panics
     ///
-    /// - If `source` is not `MBR_SIZE` bytes.
+    /// - If `source` is not [`MBR_SIZE`] bytes.
     pub fn from_bytes(source: &[u8]) -> Result<Self> {
         assert_eq!(source.len(), MBR_SIZE, "Invalid source");
         // Safe because ProtectiveMbr is simple and repr(C, packed),
@@ -99,7 +99,7 @@ impl ProtectiveMbr {
     ///
     /// # Panics
     ///
-    /// - If `dest` is not `block_size` bytes
+    /// - If `dest` is not [`MBR_SIZE`] bytes
     pub fn to_bytes(&self, dest: &mut [u8]) {
         assert_eq!(dest.len(), MBR_SIZE, "Invalid dest");
         let raw = self as *const ProtectiveMbr as *const u8;
