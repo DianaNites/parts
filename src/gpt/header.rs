@@ -264,7 +264,7 @@ mod tests {
     use static_assertions::*;
     use std::{fs, io::prelude::*};
 
-    assert_eq_size!(RawHeader, [u8; 92]);
+    assert_eq_size!(RawHeader, [u8; HEADER_SIZE as usize]);
 
     static TEST_PARTS_CF: &str = "tests/data/test_parts_cf";
 
