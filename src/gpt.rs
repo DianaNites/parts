@@ -166,7 +166,7 @@ where
     /// if you're fine with only supporting a few partitions.
     pub fn from_bytes_with_size<F: FnMut(ByteSize, &mut [u8]) -> Result<()>>(
         primary: &[u8],
-        mut alt: &[u8],
+        alt: &[u8],
         mut func: F,
         block_size: BlockSize,
         disk_size: ByteSize,
@@ -177,8 +177,8 @@ where
         //
         let _mbr = ProtectiveMbr::from_bytes(&primary[..MBR_SIZE])
             .map_err(|_| Error::Invalid("Invalid Protective MBR"))?;
-        let primary = Header::from_bytes(&mut &primary[MBR_SIZE..], block_size)?;
-        let alt = Header::from_bytes(&mut alt, block_size)?;
+        let primary = Header::from_bytes(&primary[MBR_SIZE..], block_size)?;
+        let alt = Header::from_bytes(alt, block_size)?;
         //
         let mut partitions: GenericArray<Partition, _> = Default::default();
         validate(
@@ -245,7 +245,7 @@ where
             block_size,
             disk_size,
         );
-        alt.to_bytes(&mut header_buf)?;
+        alt.to_bytes(&mut header_buf);
         func(last_lba * block_size, &header_buf)?;
         for (i, part) in self
             .partitions
@@ -268,7 +268,7 @@ where
             block_size,
             disk_size,
         );
-        primary.to_bytes(&mut header_buf)?;
+        primary.to_bytes(&mut header_buf);
         func(LogicalBlockAddress(1) * block_size, &header_buf)?;
         for (i, part) in self
             .partitions

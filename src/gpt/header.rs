@@ -1,7 +1,7 @@
 //! Handle GPT header
 use super::{error::*, partition::MIN_PARTITIONS_BYTES};
 use crate::types::*;
-use core::{convert::TryInto, mem, slice};
+use core::{mem, slice};
 use crc::crc32;
 use uuid::Uuid;
 
@@ -194,28 +194,26 @@ impl Header {
     ///
     /// # Errors
     ///
-    /// - If `source` does not have enough data
     /// - The GPT is invalid.
-    pub fn from_bytes(source: &mut &[u8], block_size: BlockSize) -> Result<Self> {
-        let b_size = block_size.0.try_into().unwrap();
-        if source.len() < b_size {
-            return Err(Error::NotEnough);
-        }
+    ///
+    /// # Panics
+    ///
+    /// - If `source` is not `block_size` bytes
+    pub fn from_bytes(source: &[u8], block_size: BlockSize) -> Result<Self> {
+        let block_size = block_size.0 as usize;
+        assert_eq!(source.len(), block_size, "Invalid source");
         // # Safety
         // - `source` is always a valid pointer
         // - Errors if `source` doesn't have enough data
         // - `RawHeader` is repr(C, packed)
         #[allow(clippy::cast_ptr_alignment)]
-        let raw = unsafe {
-            (source
-                .get(..mem::size_of::<RawHeader>())
-                .ok_or(Error::NotEnough)?
-                .as_ptr() as *const RawHeader)
-                .read_unaligned()
-        };
+        let raw = unsafe { (source.as_ptr() as *const RawHeader).read_unaligned() };
         if raw.signature != EFI_PART {
             return Err(Error::Invalid("Invalid Signature"));
         }
+        // FIXME: crc should *actually* be calculated from header_size bytes
+        // This would be good for future proofing.
+        // We can't write newer Gpt versions, but we should be able to read them.
         if raw.header_crc32 != calculate_crc(raw) {
             return Err(Error::Invalid("CRC mismatch"));
         }
@@ -230,12 +228,16 @@ impl Header {
             partitions_crc32: raw.partitions_crc32,
             partition_size: raw.partition_size,
         };
-        *source = &source[b_size..];
         Ok(header)
     }
 
     /// Write the GPT header to `dest`
-    pub fn to_bytes(&self, dest: &mut [u8]) -> Result<()> {
+    ///
+    /// # Panics
+    ///
+    /// - if `dest` is not [`HEADER_SIZE`] bytes
+    pub fn to_bytes(&self, dest: &mut [u8]) {
+        assert_eq!(dest.len(), HEADER_SIZE as usize, "Invalid dest");
         let mut raw = RawHeader::default();
         raw.this_lba = self.this;
         raw.alt_lba = self.alt;
@@ -253,8 +255,6 @@ impl Header {
         let raw = unsafe { slice::from_raw_parts(raw, mem::size_of::<RawHeader>()) };
         //
         dest[..mem::size_of::<RawHeader>()].copy_from_slice(raw);
-        //
-        Ok(())
     }
 }
 
@@ -287,14 +287,14 @@ mod tests {
     #[test]
     fn read_write_header() -> Result {
         let raw = &data()?[BLOCK_SIZE.0 as usize..][..BLOCK_SIZE.0 as usize];
-        let header = Header::from_bytes(&mut &*raw, BLOCK_SIZE)?;
+        let header = Header::from_bytes(raw, BLOCK_SIZE)?;
         assert_eq!(
             header.uuid,
             Uuid::parse_str(CF_DISK_GUID).unwrap(),
             "UUID didn't match test data"
         );
         let mut written = vec![0; BLOCK_SIZE.0 as usize];
-        header.to_bytes(&mut written)?;
+        header.to_bytes(&mut written[..HEADER_SIZE as usize]);
         assert_eq!(
             written.len(),
             raw.len(),
@@ -308,14 +308,14 @@ mod tests {
     #[test]
     fn read_write_large_header() -> Result {
         let raw = &data()?[BLOCK_SIZE.0 as usize..][..BLOCK_SIZE.0 as usize];
-        let header = Header::from_bytes(&mut &*raw, BLOCK_SIZE)?;
+        let header = Header::from_bytes(raw, BLOCK_SIZE)?;
         assert_eq!(
             header.uuid,
             Uuid::parse_str(CF_DISK_GUID).unwrap(),
             "UUID didn't match test data"
         );
         let mut written = vec![0; LARGE_BLOCK_SIZE.0 as usize];
-        header.to_bytes(&mut written)?;
+        header.to_bytes(&mut written[..HEADER_SIZE as usize]);
         // Compare only header bytes
         let written = &written[..HEADER_SIZE as usize];
         let raw = &raw[..HEADER_SIZE as usize];
