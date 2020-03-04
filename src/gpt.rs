@@ -10,9 +10,9 @@ use generic_array::{
     ArrayLength,
     GenericArray,
 };
-#[cfg(any(feature = "std", test))]
+#[cfg(feature = "std")]
 use std::io::prelude::*;
-#[cfg(any(feature = "std", test))]
+#[cfg(feature = "std")]
 use std::io::SeekFrom;
 use uuid::Uuid;
 
@@ -285,7 +285,7 @@ where
     }
 }
 
-#[cfg(any(feature = "std", test))]
+#[cfg(feature = "std")]
 impl Gpt {
     ///
     pub fn from_reader<RS: Read + Seek>(
@@ -307,7 +307,7 @@ impl Gpt {
     }
 }
 
-#[cfg(any(feature = "std", test))]
+#[cfg(feature = "std")]
 impl<N> Gpt<N>
 where
     N: ArrayLength<Partition> + Unsigned,
@@ -409,7 +409,6 @@ mod tests {
         ArrayLength,
     };
     use static_assertions::*;
-    use std::io::Cursor;
 
     assert_eq_size!(RawPartition, [u8; PARTITION_ENTRY_SIZE as usize]);
     assert_eq_size!(
@@ -503,9 +502,10 @@ mod tests {
 
     /// Test that the from_reader/to_writer methods work correctly
     #[test]
+    #[cfg(feature = "std")]
     fn std_gpt_test() -> Result {
         let raw = data()?;
-        let raw = Cursor::new(raw);
+        let raw = std::io::Cursor::new(raw);
         let gpt = Gpt::from_reader(raw, BLOCK_SIZE, ByteSize::from_bytes(TEN_MIB_BYTES as u64))?;
         expected_gpt(gpt);
         //
