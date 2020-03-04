@@ -4,9 +4,17 @@ use super::{
     header::{uuid_hack, PARTITION_ENTRY_SIZE},
 };
 use crate::types::*;
-use core::{mem, slice};
+use core::{
+    char::{decode_utf16, REPLACEMENT_CHARACTER},
+    mem,
+    slice,
+    str::from_utf8,
+};
 use crc::{crc32, Hasher32};
-use generic_array::{typenum::U36, GenericArray};
+use generic_array::{
+    typenum::{U36, U70},
+    GenericArray,
+};
 use uuid::Uuid;
 
 /// A minimum of 16,384 bytes are reserved for the partition array.
@@ -89,8 +97,9 @@ pub struct Partition {
     // TODO: Bitflags
     attributes: u64,
 
-    /// Null-terminated name, UCS-2/UTF-16LE string,
-    name: GenericArray<u16, U36>,
+    /// Partition name, converted from UTF-16-LE
+    /// U70 because null-terminated, we don't need the null.
+    name: GenericArray<u8, U70>,
 }
 
 impl Partition {
@@ -101,13 +110,21 @@ impl Partition {
     pub(crate) fn from_bytes(source: &[u8]) -> Self {
         #[allow(clippy::cast_ptr_alignment)]
         let part = unsafe { (source.as_ptr() as *const RawPartition).read_unaligned() };
+        let mut name: GenericArray<u8, U70> = Default::default();
+        let mut offset = 0;
+        decode_utf16(part.name)
+            .map(|r| r.unwrap_or(REPLACEMENT_CHARACTER))
+            .for_each(|r| {
+                r.encode_utf8(&mut name[offset..]);
+                offset += r.len_utf8();
+            });
         Partition {
             partition_type: uuid_hack(part.partition_type_guid),
             guid: uuid_hack(part.partition_guid),
             start: part.starting_lba,
             end: part.ending_lba,
             attributes: part.attributes,
-            name: part.name,
+            name,
         }
     }
 
@@ -118,7 +135,10 @@ impl Partition {
         raw.starting_lba = self.start;
         raw.ending_lba = self.end;
         raw.attributes = self.attributes;
-        raw.name = self.name;
+        self.name()
+            .encode_utf16()
+            .enumerate()
+            .for_each(|(i, c)| raw.name[i] = c);
         //
         let raw = &raw as *const RawPartition as *const u8;
         // Safe because we know the sizes
@@ -128,6 +148,12 @@ impl Partition {
 }
 
 impl Partition {
+    pub fn name(&self) -> &str {
+        from_utf8(&self.name)
+            .unwrap()
+            .trim_end_matches(|c| c == '\0')
+    }
+
     pub fn uuid(&self) -> Uuid {
         self.guid
     }
@@ -136,13 +162,44 @@ impl Partition {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::{Result, *};
     use static_assertions::*;
 
     assert_eq_size!(RawPartition, [u8; PARTITION_ENTRY_SIZE as usize]);
 
     #[test]
-    #[ignore]
-    fn read_part() {
-        todo!()
+    fn part_roundtrip() -> Result {
+        let raw = data_parted()?;
+        // Skip MBR and GPT header, first partition is there.
+        let raw = &raw[512 * 2..];
+        let part = Partition::from_bytes(raw);
+        assert_eq!("Test", part.name());
+        let mut new_raw = [0; PARTITION_ENTRY_SIZE as usize];
+        part.to_bytes(&mut new_raw);
+        assert_eq!(&new_raw[..], &raw[..PARTITION_ENTRY_SIZE as usize]);
+        Ok(())
+    }
+
+    #[test]
+    fn part_name_emoji() {
+        let mut raw = [0; PARTITION_ENTRY_SIZE as usize];
+        // Because I was eating pizza when I wrote this.
+        let name = "🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕!!";
+        assert_eq!(name.len(), 70);
+        let mut raw_name = [0; 70];
+        raw_name[..name.len()].clone_from_slice(name.as_bytes());
+        let part = Partition {
+            partition_type: Uuid::nil(),
+            guid: Uuid::nil(),
+            start: LogicalBlockAddress(0),
+            end: LogicalBlockAddress(0),
+            attributes: 0,
+            name: *GenericArray::from_slice(&raw_name),
+        };
+        assert_eq!(name, part.name());
+        part.to_bytes(&mut raw);
+        //
+        let part = Partition::from_bytes(&raw);
+        assert_eq!(name, part.name());
     }
 }
