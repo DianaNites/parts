@@ -15,6 +15,9 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     /// Not enough data was provided
+    ///
+    /// Note that when using `std` methods it's likely that `Error::Io`
+    /// will be returned rather than this.
     NotEnough,
 
     /// Encountered an unsupported GPT format
