@@ -31,6 +31,7 @@
 //! # }
 //! ```
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
+#![cfg_attr(feature = "nightly", feature(external_doc))]
 #![deny(missing_docs)]
 
 #[cfg(test)]
@@ -50,3 +51,7 @@ pub use partitions::*;
 pub use generic_array::typenum;
 #[doc(inline)]
 pub use uuid;
+
+#[cfg(all(doctest, feature = "nightly"))]
+#[doc(include = "../README.md")]
+pub struct ReadmeDocTests;

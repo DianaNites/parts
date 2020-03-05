@@ -14,17 +14,12 @@
 
 A GPT Partition Manager.
 
-Parts is both a library and a binary tool to manage GPT partition labels,
-written in pure Rust.
+Parts is a pure Rust library to manage GPT partition labels.
 
 Parts allows you to read, write, and manipulate GPT tables in a safe and
 efficient manner.
 
 ## Install
-
-```shell
-cargo install parts
-```
 
 ```toml
 [dependencies]
@@ -36,32 +31,9 @@ parts = "0.1.0"
 NOTE: Please don't use this, it's new, WIP, and untested.
 Back up your data, or only use it on virtual disks.
 
-The code is well documented but unpolished, and the API is unstable.
+The code is (hopefully) well documented, but unpolished, and the API is unstable.
 
-This example opens a disk image file, and adds a partition.
-
-```rust
-use parts::{Gpt, GptPartBuilder, types::*};
-use std::fs::File;
-const PATH: &str = "tests/data/test_parts";
-
-// A reasonable default block size.
-const BLOCK_SIZE: BlockSize = BlockSize(512);
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut gpt = Gpt::from_reader(File::open(PATH)?, BLOCK_SIZE)?;
-    let part = GptPartBuilder::new(BLOCK_SIZE)
-        .name("Example")
-        .size((BLOCK_SIZE * 2).into())
-        .start(34.into())
-        .finish();
-    gpt.add_partition(part);
-    // This is left as an exercise to the reader.
-    // gpt.to_writer(output_file);
-
-    Ok(())
-}
-```
+See the docs for examples.
 
 <!-- TODO: CLI Example here -->
 
