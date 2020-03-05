@@ -310,6 +310,21 @@ where
     N: ArrayLength<Partition> + Unsigned,
     N::ArrayType: Copy,
 {
+    /// Create a new GPT Table with no partitions
+    ///
+    /// This requires the `std` feature to generate a unique Uuid.
+    ///
+    /// See [`Gpt::with_uuid`] for a `no_std` solution.
+    // Gpt can't be `Default`, this is std only.
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        Gpt {
+            uuid: Uuid::new_v4(),
+            partitions: Default::default(),
+            partitions_len: 0,
+        }
+    }
+
     ///
     pub fn from_reader_with_size<RS: Read + Seek>(
         mut source: RS,
@@ -361,6 +376,17 @@ where
     N: ArrayLength<Partition> + Unsigned,
     N::ArrayType: Copy,
 {
+    ///
+    // TODO: Take random data instead?
+    // Don't want people using a duplicate Uuid from Gpt::uuid?
+    pub fn with_uuid(uuid: Uuid) -> Self {
+        Gpt {
+            uuid,
+            partitions: Default::default(),
+            partitions_len: 0,
+        }
+    }
+
     /// Disk UUID
     pub fn uuid(&self) -> Uuid {
         self.uuid
