@@ -34,9 +34,15 @@ pub enum PartitionType {
     LinuxSwap,
 }
 
+impl Default for PartitionType {
+    fn default() -> Self {
+        PartitionType::Unused
+    }
+}
+
 // Helps macro
-#[allow(non_upper_case_globals)]
 mod types {
+    #![allow(non_upper_case_globals)]
     pub const Unused: &str = "00000000-0000-0000-0000-000000000000";
     pub const LegacyMbr: &str = "024DEE41-33E7-11D3-9D69-0008C781F39F";
     pub const EfiSystem: &str = "C12A7328-F81F-11D2-BA4B-00A0C93EC93B";
