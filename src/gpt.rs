@@ -108,12 +108,8 @@ impl Gpt {
     ///
     /// `alt` must be the last LBA. That is, `block_size` bytes.
     ///
-    /// `func` will be called for every partition in the GPT.
-    ///
-    /// As an argument it receives the byte offset of the partition entry,
-    /// and a buffer capable of holding each partition entry.
-    ///
-    /// It returns a [`Result`]<()>, and errors are propagated.
+    /// `func` is called to read data. Errors are propagated.
+    /// It's arguments are a byte offset and a buffer to read into.
     pub fn from_bytes<F: FnMut(ByteSize, &mut [u8]) -> Result<()>>(
         primary: &[u8],
         alt: &[u8],
