@@ -43,16 +43,22 @@ pub enum PartitionType {
     /// Linux Swap
     LinuxSwap,
 
-    /// Alias for historical `coreos-rootfs`
+    /// Linux Reserved
+    LinuxReserved,
+
+    /// Linux Logical Volume Management
+    LinuxLvm,
+
+    /// CoreOS Alias for historical `coreos-rootfs`
     CoreOsUsr,
 
-    /// Support for auto-resizing via `extend-filesystems`.
+    /// CoreOS Auto-resizing
     CoreOsResize,
 
-    /// Reserved for OEM usage
+    /// CoreOS Reserved for OEM usage
     CoreOsReserved,
 
-    /// RAID partition containing a rootfs
+    /// CoreOS RAID partition containing a rootfs
     CoreOsRootRaid,
 }
 
@@ -77,6 +83,8 @@ mod types {
     //
     pub const LinuxFilesystemData: &str = "0FC63DAF-8483-4772-8E79-3D69D8477DE4";
     pub const LinuxSwap: &str = "0657FD6D-A4AB-43C4-84E5-0933C84B4F4F";
+    pub const LinuxLvm: &str = "E6D6D379-F507-44C2-A23C-238F2A3DF928";
+    pub const LinuxReserved: &str = "8DA63339-0007-60C0-C436-083AC8230908";
     //
     pub const CoreOsUsr: &str = "5dfbf5f4-2848-4bac-aa5e-0d9a20b745a6";
     pub const CoreOsResize: &str = "3884dd41-8582-4404-b9a8-e9b84f2df50e";
@@ -125,6 +133,8 @@ impl PartitionType {
             //
             LinuxFilesystemData,
             LinuxSwap,
+            LinuxLvm,
+            LinuxReserved,
             //
             CoreOsUsr,
             CoreOsResize,
@@ -149,6 +159,8 @@ impl PartitionType {
             //
             LinuxFilesystemData,
             LinuxSwap,
+            LinuxLvm,
+            LinuxReserved,
             //
             CoreOsUsr,
             CoreOsResize,
