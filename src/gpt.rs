@@ -154,6 +154,28 @@ impl Gpt {
     }
 }
 
+#[cfg(feature = "std")]
+impl Gpt {
+    ///
+    pub fn from_reader<RS: Read + Seek>(
+        source: RS,
+        block_size: BlockSize,
+        disk_size: ByteSize,
+    ) -> Result<Self> {
+        Gpt::from_reader_with_size(source, block_size, disk_size)
+    }
+
+    ///
+    pub fn to_writer<WS: Write + Seek>(
+        &self,
+        dest: WS,
+        block_size: BlockSize,
+        disk_size: ByteSize,
+    ) -> Result<()> {
+        self.to_writer_with_size(dest, block_size, disk_size)
+    }
+}
+
 impl<N> Gpt<N>
 where
     N: ArrayLength<Partition> + Unsigned,
@@ -282,28 +304,6 @@ where
             func(b, &partition_buf)?;
         }
         Ok(())
-    }
-}
-
-#[cfg(feature = "std")]
-impl Gpt {
-    ///
-    pub fn from_reader<RS: Read + Seek>(
-        source: RS,
-        block_size: BlockSize,
-        disk_size: ByteSize,
-    ) -> Result<Self> {
-        Gpt::from_reader_with_size(source, block_size, disk_size)
-    }
-
-    ///
-    pub fn to_writer<WS: Write + Seek>(
-        &self,
-        dest: WS,
-        block_size: BlockSize,
-        disk_size: ByteSize,
-    ) -> Result<()> {
-        self.to_writer_with_size(dest, block_size, disk_size)
     }
 }
 
