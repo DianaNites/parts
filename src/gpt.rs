@@ -511,11 +511,28 @@ mod tests {
         Ok(())
     }
 
-    /// Don't panic on slice indexing if given an empty slice?
+    /// Don't panic on slice indexing if given an empty slice
     #[test]
+    // FIXME: See Gpt::from_bytes_with_size for requirements for this.
     #[ignore]
     fn empty_bytes_regress() {
-        read_gpt_size::<U128>(&[]).unwrap();
+        let raw = &[];
+        let gpt = Gpt::<U128>::from_bytes_with_size(
+            raw,
+            raw,
+            |i, buf| {
+                let i = i.as_bytes() as usize;
+                let size = buf.len();
+                buf.copy_from_slice(&raw[i..][..size]);
+                Ok(())
+            },
+            BLOCK_SIZE,
+            ByteSize::from_bytes(TEN_MIB_BYTES as u64),
+        );
+        let e = gpt.unwrap_err();
+        if let Error::NotEnough = e {
+            panic!("Wrong error");
+        }
     }
 
     /// Make sure that if a `Gpt<U0>` is written to a device with 1 partition,
