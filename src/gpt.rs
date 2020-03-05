@@ -192,7 +192,8 @@ where
         let b_size = block_size.0 as usize;
         assert_eq!(primary.len(), b_size * 2, "Invalid primary");
         assert_eq!(alt.len(), b_size, "Invalid alt");
-        //
+        // FIXME: remove primary/alt. Header should take a closure
+        // and chunk a fixed-size slice instead of requiring block_size.
         let _mbr = ProtectiveMbr::from_bytes(&primary[..MBR_SIZE])
             .map_err(|_| Error::Invalid("Invalid Protective MBR"))?;
         let primary = Header::from_bytes(&primary[MBR_SIZE..], block_size)?;
