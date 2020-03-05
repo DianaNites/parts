@@ -37,6 +37,9 @@ pub enum PartitionType {
     /// Microsoft Logical Disk Manager Data Partition
     MicrosoftLdm,
 
+    /// Microsoft Storage Spaces
+    MicrosoftStorageSpace,
+
     /// Linux Filesystem
     LinuxFilesystemData,
 
@@ -80,6 +83,7 @@ mod types {
     pub const MicrosoftRecoveryEnvironment: &str = "DE94BBA4-06D1-4D40-A16A-BFD50179D6AC";
     pub const MicrosoftLdmMetadata: &str = "5808C8AA-7E8F-42E0-85D2-E1E90434CFB3";
     pub const MicrosoftLdm: &str = "AF9B60A0-1431-4F62-BC68-3311714A69AD";
+    pub const MicrosoftStorageSpace: &str = "E75CAF8F-F680-4CEE-AFA3-B001E56EFC2D";
     //
     pub const LinuxFilesystemData: &str = "0FC63DAF-8483-4772-8E79-3D69D8477DE4";
     pub const LinuxSwap: &str = "0657FD6D-A4AB-43C4-84E5-0933C84B4F4F";
@@ -130,6 +134,7 @@ impl PartitionType {
             MicrosoftRecoveryEnvironment,
             MicrosoftLdmMetadata,
             MicrosoftLdm,
+            MicrosoftStorageSpace,
             //
             LinuxFilesystemData,
             LinuxSwap,
@@ -156,6 +161,7 @@ impl PartitionType {
             MicrosoftRecoveryEnvironment,
             MicrosoftLdmMetadata,
             MicrosoftLdm,
+            MicrosoftStorageSpace,
             //
             LinuxFilesystemData,
             LinuxSwap,
