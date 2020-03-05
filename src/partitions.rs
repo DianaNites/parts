@@ -1,4 +1,5 @@
 //! Known partition types
+use derive_more::Display;
 use uuid::Uuid;
 
 /// Recognized GPT Partition Types
@@ -6,7 +7,7 @@ use uuid::Uuid;
 /// A UUID that matches against the [`PartitionType::Unknown`] variant
 /// is not guaranteed to continue to do so, as more partition types
 /// become recognized.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Display)]
 #[non_exhaustive]
 pub enum PartitionType {
     /// Unused entry
@@ -103,5 +104,18 @@ impl PartitionType {
             LinuxFilesystemData,
             LinuxSwap
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display() {
+        assert_eq!(
+            &format!("{}", PartitionType::LinuxFilesystemData),
+            "LinuxFilesystemData"
+        );
     }
 }
