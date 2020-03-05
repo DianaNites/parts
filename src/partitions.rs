@@ -3,19 +3,17 @@ use uuid::Uuid;
 
 /// Recognized GPT Partition Types
 ///
-/// This is non-exhaustive,
-/// it's unrecommended to match on this.
-///
 /// A UUID that matches against the [`PartitionType::Unknown`] variant
 /// is not guaranteed to continue to do so, as more partition types
 /// become recognized.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
 pub enum PartitionType {
     /// Unused entry
     Unused,
 
     /// The partition type is unknown.
-    Unknown,
+    Unknown(Uuid),
 
     /// Partition contains legacy MBR
     LegacyMbr,
@@ -53,7 +51,7 @@ macro_rules! __to_uuid_match {
     ($self:ident, $($i:ident),+) => {
         match $self {
             PartitionType::Unused => Uuid::nil(),
-            PartitionType::Unknown => Uuid::nil(),
+            PartitionType::Unknown(u) => u,
             $(
             PartitionType::$i => Uuid::parse_str($i).unwrap(),
             )+
@@ -69,7 +67,7 @@ macro_rules! __from_uuid_match {
             $(
             $i => PartitionType::$i,
             )+
-            _ => PartitionType::Unknown,
+            u => PartitionType::Unknown(Uuid::parse_str(u).unwrap()),
         }
     };
 }
