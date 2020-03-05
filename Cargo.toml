@@ -26,7 +26,8 @@ thiserror = "1.0.11"
 default = ["std"]
 # Enable support for various standard library types
 std = [
-    "thiserror"
+    "thiserror",
+    "uuid/std",
 ]
 # Nightly is used for docs.
 nightly = []
