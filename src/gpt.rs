@@ -152,7 +152,9 @@ impl Gpt {
 
 #[cfg(feature = "std")]
 impl Gpt {
+    /// Read the GPT from a [`Read`]er.
     ///
+    /// See [`Gpt::from_bytes`] for more details.
     pub fn from_reader<RS: Read + Seek>(
         source: RS,
         block_size: BlockSize,
@@ -161,7 +163,9 @@ impl Gpt {
         Gpt::from_reader_with_size(source, block_size, disk_size)
     }
 
+    /// Write the GPT to a [`Write`]r.
     ///
+    /// See [`Gpt::to_bytes`] for more details.
     pub fn to_writer<WS: Write + Seek>(
         &self,
         dest: WS,
@@ -325,7 +329,7 @@ where
         }
     }
 
-    ///
+    /// Like [`Gpt::from_bytes_with_size`] but for readers
     pub fn from_reader_with_size<RS: Read + Seek>(
         mut source: RS,
         block_size: BlockSize,
@@ -351,7 +355,7 @@ where
         Ok(gpt)
     }
 
-    ///
+    /// Like [`Gpt::to_bytes_with_size`] but for writers
     pub fn to_writer_with_size<WS: Write + Seek>(
         &self,
         mut dest: WS,
@@ -376,9 +380,12 @@ where
     N: ArrayLength<Partition> + Unsigned,
     N::ArrayType: Copy,
 {
+    /// Create a new GPT Table
     ///
+    /// See [`Gpt::new`] for details.
     // TODO: Take random data instead?
     // Don't want people using a duplicate Uuid from Gpt::uuid?
+    // Plus need to create Uuid's for partitions? Problem for the Builder?
     pub fn with_uuid(uuid: Uuid) -> Self {
         Gpt {
             uuid,
