@@ -261,28 +261,10 @@ impl Header {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::{Result, *};
     use static_assertions::*;
-    use std::{fs, io::prelude::*};
 
     assert_eq_size!(RawHeader, [u8; HEADER_SIZE as usize]);
-
-    static TEST_PARTS_CF: &str = "tests/data/test_parts_cf";
-
-    const BLOCK_SIZE: BlockSize = BlockSize(512);
-    const LARGE_BLOCK_SIZE: BlockSize = BlockSize(4096);
-    // 10 * 1024^2
-    const TEN_MIB_BYTES: usize = 10_485_760;
-    const CF_DISK_GUID: &str = "A17875FB-1D86-EE4D-8DFE-E3E8ABBCD364";
-
-    type Result<T = ()> = anyhow::Result<T>;
-
-    /// Read test data
-    fn data() -> Result<Vec<u8>> {
-        let mut data = vec![0; TEN_MIB_BYTES];
-        let mut file = fs::File::open(TEST_PARTS_CF)?;
-        file.read_exact(&mut data)?;
-        Ok(data)
-    }
 
     #[test]
     fn read_write_header() -> Result {
