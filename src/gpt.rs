@@ -117,6 +117,7 @@ impl Gpt {
         block_size: BlockSize,
         disk_size: ByteSize,
     ) -> Result<Self> {
+        // TODO: Remove func arg, wrap similar to (to/from)_(reader/writer)
         Gpt::from_bytes_with_size(primary, alt, func, block_size, disk_size)
     }
 
@@ -146,6 +147,7 @@ impl Gpt {
         block_size: BlockSize,
         disk_size: ByteSize,
     ) -> Result<()> {
+        // TODO: Remove func arg, wrap similar to (to/from)_(reader/writer)
         self.to_bytes_with_size(func, block_size, disk_size)
     }
 }
