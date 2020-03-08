@@ -2,7 +2,7 @@
 use super::{error::*, partition::MIN_PARTITIONS_BYTES};
 use crate::types::*;
 use core::{mem, slice};
-use crc::crc32;
+use crc::{crc32, Hasher32};
 use uuid::Uuid;
 
 /// "EFI PART" constant as a u64
@@ -36,7 +36,9 @@ pub fn uuid_hack(uuid: [u8; 16]) -> Uuid {
 }
 
 /// Calculate the Header CRC for a [`RawHeader`].
-fn calculate_crc(mut header: RawHeader) -> u32 {
+///
+/// `extra` is all bytes in the rest of the block, if any.
+fn calculate_crc(mut header: RawHeader, extra: &[u8]) -> u32 {
     header.header_crc32 = 0;
     // # Safety
     // - `RawHeader` is repr(C,packed)
@@ -48,7 +50,13 @@ fn calculate_crc(mut header: RawHeader) -> u32 {
             mem::size_of::<RawHeader>(),
         )
     };
-    crc32::checksum_ieee(&source_bytes[..header.header_size as usize])
+    let mut digest = crc32::Digest::new(crc32::IEEE);
+    // Header bytes
+    digest.write(&source_bytes[..HEADER_SIZE as usize]);
+    // Any extra. Shouldn't change the result if passed an empty slice?
+    let size = (header.header_size - HEADER_SIZE) as usize;
+    digest.write(&extra[..size]);
+    digest.sum32()
 }
 
 /// The GPT Header Structure
@@ -211,10 +219,7 @@ impl Header {
         if raw.signature != EFI_PART {
             return Err(Error::Invalid("Invalid Signature"));
         }
-        // FIXME: crc should *actually* be calculated from header_size bytes
-        // This would be good for future proofing.
-        // We can't write newer Gpt versions, but we should be able to read them.
-        if raw.header_crc32 != calculate_crc(raw) {
+        if raw.header_crc32 != calculate_crc(raw, &source[HEADER_SIZE as usize..]) {
             return Err(Error::Invalid("CRC mismatch"));
         }
         let header = Header {
@@ -248,7 +253,7 @@ impl Header {
         raw.partitions = self.partitions;
         // No need to calculate or be passed it, should be set when `self` is created.
         raw.partitions_crc32 = self.partitions_crc32;
-        raw.header_crc32 = calculate_crc(raw);
+        raw.header_crc32 = calculate_crc(raw, &[]);
         //
         let raw = &raw as *const RawHeader as *const u8;
         // Safe because we know the sizes
