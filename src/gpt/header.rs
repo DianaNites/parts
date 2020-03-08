@@ -220,6 +220,10 @@ impl Header {
         if raw.signature != EFI_PART {
             return Err(Error::Invalid("Invalid Signature"));
         }
+        // See [`RawHeader::header_size`]
+        if raw.header_size < HEADER_SIZE || raw.header_size as usize >= block_size {
+            return Err(Error::Invalid("Invalid header size"));
+        }
         if raw.header_crc32 != calculate_crc(raw, &source[HEADER_SIZE as usize..]) {
             return Err(Error::Invalid("CRC mismatch"));
         }
