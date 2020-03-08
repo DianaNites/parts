@@ -215,7 +215,6 @@ impl Header {
         // - `source` is always a valid pointer
         // - Errors if `source` doesn't have enough data
         // - `RawHeader` is repr(C, packed)
-        #[allow(clippy::cast_ptr_alignment)]
         let raw = unsafe { (source.as_ptr() as *const RawHeader).read_unaligned() };
         if raw.signature != EFI_PART {
             return Err(Error::Invalid("Invalid Signature"));
