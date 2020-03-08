@@ -111,6 +111,7 @@ struct RawHeader {
     partitions_crc32: u32,
 }
 
+/// A minimally "valid" Default for `RawHeader`.
 impl Default for RawHeader {
     fn default() -> Self {
         RawHeader {
