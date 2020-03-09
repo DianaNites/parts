@@ -128,7 +128,7 @@ impl Gpt {
 
     /// Write the full GPT to a byte slice
     ///
-    /// See [`to_bytes_with_size`] if getting a slice of
+    /// See [`Gpt::to_bytes_with_size`] if getting a slice of
     /// the entire disk isn't possible,
     /// and for details of what gets written and in what order.
     pub fn to_bytes(
