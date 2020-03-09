@@ -1,5 +1,4 @@
 //! Error handling
-use crate::types::LogicalBlockAddress;
 use displaydoc::Display;
 #[cfg(feature = "std")]
 use thiserror::Error;

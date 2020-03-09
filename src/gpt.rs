@@ -4,7 +4,6 @@ use crate::{
     mbr::{ProtectiveMbr, MBR_SIZE},
     types::*,
 };
-use core::ops::RangeInclusive;
 use crc::{crc32, Hasher32};
 use generic_array::{
     sequence::GenericSequence,
