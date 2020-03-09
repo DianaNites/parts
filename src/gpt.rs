@@ -243,6 +243,10 @@ where
     ///
     /// It returns a `Result<()>`, and errors are propagated.
     ///
+    /// # Errors
+    ///
+    /// If all partitions do not fit within the usable blocks
+    ///
     /// # Details
     ///
     /// This will tell `func` to write, in order:
@@ -252,8 +256,6 @@ where
     /// - The backup header array
     /// - The primary header
     /// - The primary header array
-    // TODO: When partition validity checks are done, they'll need to be rechecked
-    // here. Make sure all partitions are within disk_size/usable blocks
     pub fn to_bytes_with_size<F: FnMut(ByteSize, &[u8]) -> Result<()>>(
         &self,
         mut func: F,
@@ -284,6 +286,15 @@ where
             block_size,
             disk_size,
         );
+        // Verify all partitions are within bounds
+        for part in self.partitions() {
+            if ((part.start() / block_size) < alt.first_usable)
+                || ((part.end() / block_size) > alt.last_usable)
+            {
+                return Err(Error::NotEnough);
+            }
+        }
+        //
         self.write_header_array(&mut func, alt, last_lba, block_size)?;
         //
         let primary = Header::new(
