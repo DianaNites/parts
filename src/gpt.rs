@@ -268,11 +268,7 @@ where
         //
         let mut partition_buf = [0; PARTITION_ENTRY_SIZE as usize];
         let mut digest = crc32::Digest::new(crc32::IEEE);
-        for part in self
-            .partitions
-            .into_iter()
-            .filter(|p| *p != Partition::new())
-        {
+        for part in self.partitions() {
             part.to_bytes(&mut partition_buf, block_size);
             digest.write(&partition_buf);
         }
@@ -457,12 +453,7 @@ where
         //
         header.to_bytes(&mut header_buf);
         func(last_lba * block_size, &header_buf)?;
-        for (i, part) in self
-            .partitions
-            .into_iter()
-            .filter(|p| *p != Partition::new())
-            .enumerate()
-        {
+        for (i, part) in self.partitions().iter().enumerate() {
             part.to_bytes(&mut partition_buf, block_size);
             let b = header.array * block_size;
             let b = b + (ByteSize::from_bytes(PARTITION_ENTRY_SIZE as u64) * i as u64);
