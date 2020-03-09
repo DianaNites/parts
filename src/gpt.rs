@@ -727,29 +727,3 @@ mod tests {
         Ok(())
     }
 }
-
-// TODO: Port these tests
-#[cfg(any())]
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::util::{Result, *};
-    use std::io::Cursor;
-    use uuid::Uuid;
-
-    /// Ensure that [`GptPartBuilder::finish`] doesn't create an invalid
-    /// partition if [`GptPartBuilder::size`] isn't called.
-    ///
-    /// Previously it would generate a partition ending before it started
-    ///
-    /// The minimum size is now `block_size`
-    #[test]
-    fn gpt_part_builder_minimum_size() {
-        let part = GptPartBuilder::new(BLOCK_SIZE).finish();
-        assert_eq!(
-            part.start(),
-            part.end(),
-            "GptPartBuilder invalid minimum size"
-        );
-    }
-}
