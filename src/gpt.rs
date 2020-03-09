@@ -417,11 +417,11 @@ where
 
     /// Add a partition
     pub fn add_partition(&mut self, part: Partition) -> Result<()> {
+        self.check_overlap(&part)?;
         let len = core::cmp::min(self.partitions_len as usize, self.partitions.len());
         self.partitions[len] = part;
         self.partitions_len += 1;
         self.partitions_mut().sort_unstable_by_key(|p| p.start());
-        self.check_overlap()?;
         Ok(())
     }
 
@@ -442,12 +442,10 @@ where
     N: ArrayLength<Partition> + Unsigned,
     N::ArrayType: Copy,
 {
-    fn check_overlap(&mut self) -> Result<()> {
+    fn check_overlap(&mut self, part: &Partition) -> Result<()> {
         for existing in self.partitions() {
-            for part in self.partitions() {
-                if existing.start() <= part.start() && part.end() <= existing.end() {
-                    return Err(Error::Overlap);
-                }
+            if part.start() >= existing.start() && part.start() <= existing.end() {
+                return Err(Error::Overlap);
             }
         }
         Ok(())
