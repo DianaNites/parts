@@ -43,7 +43,11 @@ mod mbr;
 mod partitions;
 pub mod types;
 
-pub use gpt::{error::Error, partition::Partition, Gpt};
+pub use gpt::{
+    error::Error,
+    partition::{Partition, PartitionBuilder},
+    Gpt,
+};
 pub use partitions::*;
 
 // Re-exports
