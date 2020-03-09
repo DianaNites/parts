@@ -4,6 +4,7 @@ use crate::{
     mbr::{ProtectiveMbr, MBR_SIZE},
     types::*,
 };
+use core::ops::RangeInclusive;
 use crc::{crc32, Hasher32};
 use generic_array::{
     sequence::GenericSequence,
@@ -254,6 +255,7 @@ where
     /// - The primary header array
     // TODO: When partition validity checks are done, they'll need to be rechecked
     // here. Make sure all partitions are within disk_size/usable blocks
+    // TODO: Make partition have byte offsets instead.
     pub fn to_bytes_with_size<F: FnMut(ByteSize, &[u8]) -> Result<()>>(
         &self,
         mut func: F,
@@ -435,19 +437,40 @@ where
     /// Add a partition
     pub fn add_partition(&mut self, part: Partition) -> Result<()> {
         let len = core::cmp::min(self.partitions_len as usize, self.partitions.len());
-        // TODO: Check that `part` doesn't overlap with any existing.
         self.partitions[len] = part;
         self.partitions_len += 1;
+        self.partitions_mut().sort_unstable_by_key(|p| p.start());
+        self.check_overlap()?;
         Ok(())
     }
 
     /// Remove the partition at `index`.
+    // FIXME: Where is the index supposed to come from, exactly?
     pub fn remove_partition(&mut self, index: usize) {
         self.partitions_mut()[index] = Partition::new();
         self.partitions_len -= 1;
+        self.partitions_mut().sort_unstable_by_key(|p| p.start());
     }
 
     // TODO: First/last usable block getters, and remaining. Store disk/block size?
+}
+
+// Private APIs
+impl<N> Gpt<N>
+where
+    N: ArrayLength<Partition> + Unsigned,
+    N::ArrayType: Copy,
+{
+    fn check_overlap(&mut self) -> Result<()> {
+        for existing in self.partitions() {
+            for part in self.partitions() {
+                if existing.start() <= part.start() && part.end() <= existing.end() {
+                    return Err(Error::Overlap);
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -632,8 +655,20 @@ mod tests {
         let raw = data()?;
         let mut gpt = read_gpt_size::<U128>(&raw)?;
         let part = gpt.partitions()[0];
-        gpt.add_partition(part)?;
+        // Just test that it doesn't panic
+        let _ = gpt.add_partition(part);
         Ok(())
+    }
+
+    /// Prevent adding overlapping partitions
+    #[test]
+    #[should_panic(expected = "Attempted to add overlapping partitions")]
+    fn invalid_partitions() {
+        let raw = data().unwrap();
+        let mut gpt = read_gpt_size::<U128>(&raw).unwrap();
+        let part = gpt.partitions()[0];
+        let e = gpt.add_partition(part).unwrap_err();
+        panic!(e.to_string());
     }
 }
 

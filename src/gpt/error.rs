@@ -1,4 +1,5 @@
 //! Error handling
+use crate::types::LogicalBlockAddress;
 use displaydoc::Display;
 #[cfg(feature = "std")]
 use thiserror::Error;
@@ -25,6 +26,9 @@ pub enum Error {
 
     /// The GPT Header was invalid: {0}
     Invalid(&'static str),
+
+    /// Attempted to add overlapping partitions
+    Overlap,
 }
 
 pub type Result<T> = core::result::Result<T, Error>;
