@@ -203,7 +203,7 @@ pub struct PartitionBuilder {
     end: End,
     partition_type: PartitionType,
     uuid: Uuid,
-    name: String,
+    name: [u8; 70],
 }
 
 impl PartitionBuilder {
@@ -216,7 +216,7 @@ impl PartitionBuilder {
             end: Default::default(),
             partition_type: Default::default(),
             uuid,
-            name: String::new(),
+            name: [0; 70],
         }
     }
 
@@ -255,7 +255,7 @@ impl PartitionBuilder {
     /// - If name is more than 70 bytes.
     pub fn name(mut self, name: &str) -> Self {
         assert!(name.len() <= 70);
-        self.name = name.into();
+        self.name[..name.len()].copy_from_slice(name.as_bytes());
         self
     }
 
@@ -276,7 +276,7 @@ impl PartitionBuilder {
             start: self.start,
             end,
             attributes: 0,
-            name: GenericArray::generate(|i| *self.name.as_bytes().get(i).unwrap_or(&0)),
+            name: GenericArray::generate(|i| *self.name.get(i).unwrap_or(&0)),
         }
     }
 }
