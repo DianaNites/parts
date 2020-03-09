@@ -29,6 +29,7 @@ std = [
     "thiserror",
     "uuid/std",
     "uuid/v4",
+    "anyhow/std",
 ]
 # Nightly is used for docs.
 nightly = []
