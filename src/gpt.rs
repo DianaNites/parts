@@ -17,9 +17,9 @@ use std::io::prelude::*;
 use std::io::SeekFrom;
 use uuid::Uuid;
 
-mod error;
+pub mod error;
 mod header;
-mod partition;
+pub mod partition;
 
 fn validate<F: FnMut(ByteSize, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])>(
     primary: &Header,
