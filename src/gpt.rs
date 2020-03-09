@@ -90,7 +90,6 @@ fn validate<F: FnMut(ByteSize, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])
 ///
 /// Regardless of `N`, when reading the full partition array *is* still
 /// validated.
-// FIXME: Shouldn't be Copy/Clone, allows creating a duplicate Gpt/UUID pair.
 #[derive(Copy, Clone, PartialEq)]
 pub struct Gpt<N = U128>
 where
@@ -436,10 +435,8 @@ where
 
     /// Set the disk UUID.
     ///
-    /// # Safety
-    ///
-    /// A GPT UUID must be unique, and this method allows violating that.
-    pub unsafe fn set_uuid(&mut self, uuid: Uuid) {
+    /// Be careful with this, as UUID's MUST be unique.
+    pub fn set_uuid(&mut self, uuid: Uuid) {
         self.uuid = uuid;
     }
 
