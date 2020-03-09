@@ -266,7 +266,6 @@ where
         mbr.to_bytes(&mut mbr_buf);
         func(ByteSize::from_bytes(0), &mbr_buf)?;
         //
-        let mut header_buf = [0; HEADER_SIZE as usize];
         let mut partition_buf = [0; PARTITION_ENTRY_SIZE as usize];
         let mut digest = crc32::Digest::new(crc32::IEEE);
         for part in self
@@ -289,19 +288,7 @@ where
             block_size,
             disk_size,
         );
-        alt.to_bytes(&mut header_buf);
-        func(last_lba * block_size, &header_buf)?;
-        for (i, part) in self
-            .partitions
-            .into_iter()
-            .filter(|p| *p != Partition::new())
-            .enumerate()
-        {
-            part.to_bytes(&mut partition_buf, block_size);
-            let b = alt.array * block_size;
-            let b = b + (ByteSize::from_bytes(PARTITION_ENTRY_SIZE as u64) * i as u64);
-            func(b, &partition_buf)?;
-        }
+        self.write_header_array(&mut func, alt, last_lba, block_size)?;
         //
         let primary = Header::new(
             LogicalBlockAddress(1),
@@ -312,19 +299,7 @@ where
             block_size,
             disk_size,
         );
-        primary.to_bytes(&mut header_buf);
-        func(LogicalBlockAddress(1) * block_size, &header_buf)?;
-        for (i, part) in self
-            .partitions
-            .into_iter()
-            .filter(|p| *p != Partition::new())
-            .enumerate()
-        {
-            part.to_bytes(&mut partition_buf, block_size);
-            let b = primary.array * block_size;
-            let b = b + (ByteSize::from_bytes(PARTITION_ENTRY_SIZE as u64) * i as u64);
-            func(b, &partition_buf)?;
-        }
+        self.write_header_array(func, primary, LogicalBlockAddress(1), block_size)?;
         Ok(())
     }
 }
@@ -467,6 +442,33 @@ where
                 }
             }
         }
+        Ok(())
+    }
+
+    fn write_header_array<F: FnMut(ByteSize, &[u8]) -> Result<()>>(
+        &self,
+        mut func: F,
+        header: Header,
+        last_lba: LogicalBlockAddress,
+        block_size: BlockSize,
+    ) -> Result<()> {
+        let mut header_buf = [0; HEADER_SIZE as usize];
+        let mut partition_buf = [0; PARTITION_ENTRY_SIZE as usize];
+        //
+        header.to_bytes(&mut header_buf);
+        func(last_lba * block_size, &header_buf)?;
+        for (i, part) in self
+            .partitions
+            .into_iter()
+            .filter(|p| *p != Partition::new())
+            .enumerate()
+        {
+            part.to_bytes(&mut partition_buf, block_size);
+            let b = header.array * block_size;
+            let b = b + (ByteSize::from_bytes(PARTITION_ENTRY_SIZE as u64) * i as u64);
+            func(b, &partition_buf)?;
+        }
+        //
         Ok(())
     }
 }
