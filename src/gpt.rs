@@ -6,6 +6,7 @@ use crate::{
 };
 use crc::{crc32, Hasher32};
 use generic_array::{
+    sequence::GenericSequence,
     typenum::{Unsigned, U128},
     ArrayLength,
     GenericArray,
@@ -203,7 +204,7 @@ where
         let primary = Header::from_bytes(&primary[MBR_SIZE..], block_size)?;
         let alt = Header::from_bytes(alt, block_size)?;
         //
-        let mut partitions: GenericArray<Partition, _> = Default::default();
+        let mut partitions = GenericArray::<Partition, N>::generate(|_| Partition::new());
         validate(
             &primary,
             &alt,
@@ -324,7 +325,7 @@ where
     pub fn new() -> Self {
         Gpt {
             uuid: Uuid::new_v4(),
-            partitions: Default::default(),
+            partitions: GenericArray::<Partition, N>::generate(|_| Partition::new()),
             partitions_len: 0,
         }
     }
@@ -389,7 +390,7 @@ where
     pub fn with_uuid(uuid: Uuid) -> Self {
         Gpt {
             uuid,
-            partitions: Default::default(),
+            partitions: GenericArray::<Partition, N>::generate(|_| Partition::new()),
             partitions_len: 0,
         }
     }

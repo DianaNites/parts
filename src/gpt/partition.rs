@@ -78,11 +78,7 @@ pub struct RawPartition {
 /// # Examples
 ///
 /// TODO: List all partitions on a device
-// FIXME: Default is not a valid partition, this is public API, don't derive it.
-// We can't fix that until [#91][1] is fixed though
-// Maybe `mem::zeroed`?
-// [1]: https://github.com/fizyk20/generic-array/issues/91
-#[derive(Debug, Copy, Clone, PartialEq, Default)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Partition {
     /// Defines the type of this partition
     partition_type: PartitionType,
@@ -107,7 +103,14 @@ pub struct Partition {
 
 impl Partition {
     pub(crate) fn new() -> Self {
-        Self::default()
+        Self {
+            partition_type: Default::default(),
+            guid: Default::default(),
+            start: Default::default(),
+            end: Default::default(),
+            attributes: Default::default(),
+            name: Default::default(),
+        }
     }
 
     pub(crate) fn from_bytes(source: &[u8]) -> Self {
