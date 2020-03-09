@@ -154,18 +154,36 @@ impl Partition {
 }
 
 impl Partition {
+    /// Partition name.
+    // TODO: Use Option?
     pub fn name(&self) -> &str {
         from_utf8(&self.name)
             .unwrap()
             .trim_end_matches(|c| c == '\0')
     }
 
+    /// Partition type
     pub fn partition_type(&self) -> PartitionType {
         self.partition_type
     }
 
+    /// Unique identifer for this Partition
     pub fn uuid(&self) -> Uuid {
         self.guid
+    }
+
+    /// Partition starting block
+    ///
+    /// Note that these are only valid for a matching block and disk size.
+    pub fn start(&self) -> LogicalBlockAddress {
+        self.start
+    }
+
+    /// Partition ending block
+    ///
+    /// Note that these are only valid for a matching block and disk size.
+    pub fn end(&self) -> LogicalBlockAddress {
+        self.end
     }
 }
 
