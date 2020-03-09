@@ -433,6 +433,15 @@ where
         self.partitions_mut().sort_unstable_by_key(|p| p.start());
     }
 
+    /// Set the disk UUID.
+    ///
+    /// # Safety
+    ///
+    /// A GPT UUID must be unique, and this method allows violating that.
+    pub unsafe fn set_uuid(&mut self, uuid: Uuid) {
+        self.uuid = uuid;
+    }
+
     // TODO: First/last usable block getters, and remaining. Store disk/block size?
 }
 
