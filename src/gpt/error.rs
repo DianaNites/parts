@@ -26,7 +26,8 @@ pub enum Error {
     /// The GPT Header was invalid: {0}
     Invalid(&'static str),
 
-    /// Attempted to add overlapping partitions
+    /// Attempted to add overlapping partitions, or partition was out of usable
+    /// range
     Overlap,
 }
 
