@@ -547,7 +547,8 @@ mod tests {
 
     /// Don't panic on slice indexing if given an empty slice
     #[test]
-    // FIXME: See Gpt::from_bytes_with_size for requirements for this.
+    // FIXME: from_bytes_with_size takes `primary` and `alt`,
+    // and panics if they're not block_size.
     #[ignore]
     fn empty_bytes_regress() {
         let raw = &[];
