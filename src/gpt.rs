@@ -721,11 +721,10 @@ mod tests {
         //
         let mut gpt: Gpt<U128> = Gpt::new();
         unsafe { gpt.set_uuid(Uuid::parse_str(CF_DISK_GUID)?) };
-        let part = PartitionBuilder::new(Uuid::new_v4())
+        let part = PartitionBuilder::new(Uuid::parse_str(CF_PART_GUID)?)
             .start(ByteSize::from_mib(1))
             .size(ByteSize::from_mib(8))
             .partition_type(PartitionType::LinuxFilesystemData);
-        let part = unsafe { part.uuid(Uuid::parse_str(CF_PART_GUID)?) };
         gpt.add_partition(part.finish(BLOCK_SIZE))?;
         assert_eq!(gpt, test_gpt);
         Ok(())

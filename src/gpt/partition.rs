@@ -259,16 +259,6 @@ impl PartitionBuilder {
         self
     }
 
-    /// Set partition UUID
-    ///
-    /// # Safety
-    ///
-    /// Partition UUID's must be unique, and this method can violate that.
-    pub unsafe fn uuid(mut self, uuid: Uuid) -> Self {
-        self.uuid = uuid;
-        self
-    }
-
     /// Create Partition
     ///
     /// # Panics
