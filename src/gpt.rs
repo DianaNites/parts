@@ -436,7 +436,7 @@ where
     pub fn add_partition(&mut self, part: Partition) -> Result<()> {
         let len = core::cmp::min(self.partitions_len as usize, self.partitions.len());
         // TODO: Check that `part` doesn't overlap with any existing.
-        self.partitions_mut()[len] = part;
+        self.partitions[len] = part;
         self.partitions_len += 1;
         Ok(())
     }
@@ -620,6 +620,19 @@ mod tests {
         let gpt = read_gpt_size::<U128>(&raw)?;
         assert_eq!(gpt.partitions().len(), 0);
         //
+        Ok(())
+    }
+
+    /// Test that add_partition actually works
+    ///
+    /// Was first implemented using `partitions_mut` so index would
+    /// always be out of bounds. Oops.
+    #[test]
+    fn add_partition_regress() -> Result {
+        let raw = data()?;
+        let mut gpt = read_gpt_size::<U128>(&raw)?;
+        let part = gpt.partitions()[0];
+        gpt.add_partition(part)?;
         Ok(())
     }
 }
