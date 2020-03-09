@@ -12,6 +12,7 @@ use core::{
 };
 use crc::{crc32, Hasher32};
 use generic_array::{
+    sequence::GenericSequence,
     typenum::{U36, U70},
     GenericArray,
 };
@@ -180,6 +181,111 @@ impl Partition {
     /// Partition ending offset
     pub fn end(&self) -> ByteSize {
         self.end
+    }
+}
+
+#[derive(Debug)]
+enum End {
+    None,
+    Abs(ByteSize),
+    Rel(ByteSize),
+}
+
+impl Default for End {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+/// Create a Partition
+pub struct PartitionBuilder {
+    start: ByteSize,
+    end: End,
+    partition_type: PartitionType,
+    uuid: Uuid,
+    name: String,
+}
+
+impl PartitionBuilder {
+    /// New builder
+    pub fn new(uuid: Uuid) -> Self {
+        Self {
+            start: Default::default(),
+            end: Default::default(),
+            partition_type: Default::default(),
+            uuid,
+            name: String::new(),
+        }
+    }
+
+    /// Partition start. Required.
+    pub fn start(mut self, start: ByteSize) -> Self {
+        self.start = start;
+        self
+    }
+
+    /// Partition end. Required.
+    ///
+    /// Call one of this or [`PartitionBuilder::size`]
+    pub fn end(mut self, end: ByteSize) -> Self {
+        self.end = End::Abs(end);
+        self
+    }
+
+    /// Partition size. Required.
+    ///
+    /// Call one of this or [`PartitionBuilder::size`]
+    pub fn size(mut self, size: ByteSize) -> Self {
+        self.end = End::Rel(size);
+        self
+    }
+
+    /// Partition type. Required.
+    pub fn partition_type(mut self, p_type: PartitionType) -> Self {
+        self.partition_type = p_type;
+        self
+    }
+
+    /// Partition name.
+    ///
+    /// # Panics
+    ///
+    /// - If name is more than 70 bytes.
+    pub fn name(mut self, name: &str) -> Self {
+        assert!(name.len() <= 70);
+        self.name = name.into();
+        self
+    }
+
+    /// Set partition UUID
+    ///
+    /// # Safety
+    ///
+    /// Partition UUID's must be unique, and this method can violate that.
+    pub unsafe fn uuid(mut self, uuid: Uuid) -> Self {
+        self.uuid = uuid;
+        self
+    }
+
+    /// Create Partition
+    ///
+    /// # Panics
+    ///
+    /// - If not all required methods were called.
+    pub fn finish(self, block_size: BlockSize) -> Partition {
+        let end = match self.end {
+            End::Abs(end) => end,
+            End::Rel(end) => (self.start + end),
+            End::None => panic!("Invalid Partition Creation"),
+        } - ByteSize::from_bytes(block_size.0);
+        Partition {
+            partition_type: self.partition_type,
+            guid: self.uuid,
+            start: self.start,
+            end,
+            attributes: 0,
+            name: GenericArray::generate(|i| *self.name.as_bytes().get(i).unwrap_or(&0)),
+        }
     }
 }
 
