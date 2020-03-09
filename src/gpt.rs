@@ -4,6 +4,7 @@ use crate::{
     mbr::{ProtectiveMbr, MBR_SIZE},
     types::*,
 };
+use core::fmt;
 use crc::{crc32, Hasher32};
 use generic_array::{
     sequence::GenericSequence,
@@ -89,7 +90,7 @@ fn validate<F: FnMut(ByteSize, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])
 ///
 /// Regardless of `N`, when reading the full partition array *is* still
 /// validated.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct Gpt<N = U128>
 where
     N: ArrayLength<Partition> + Unsigned,
@@ -472,6 +473,19 @@ where
         }
         //
         Ok(())
+    }
+}
+
+impl<N> fmt::Debug for Gpt<N>
+where
+    N: ArrayLength<Partition> + Unsigned,
+    N::ArrayType: Copy,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Gpt")
+            .field("uuid", &self.uuid)
+            .field("partitions", &self.partitions())
+            .finish()
     }
 }
 
