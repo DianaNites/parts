@@ -759,20 +759,6 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    #[should_panic(expected = "Attempted to add overlapping partitions")]
-    fn invalid_partitions() {
-        let mut gpt = Gpt::new(BLOCK_SIZE, ByteSize::from_bytes(TEN_MIB_BYTES as u64));
-        let part = GptPartBuilder::new(BLOCK_SIZE)
-            .size(ByteSize::from_mib(8))
-            .start(ByteSize::from_mib(1) / BLOCK_SIZE)
-            .part_type(LINUX_PART_GUID)
-            .finish();
-        let dup_part = part.clone();
-        gpt.add_partition(part);
-        gpt.add_partition(dup_part);
-    }
-
     /// Ensure that [`GptPartBuilder::finish`] doesn't create an invalid
     /// partition if [`GptPartBuilder::size`] isn't called.
     ///
