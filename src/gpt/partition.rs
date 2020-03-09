@@ -87,10 +87,10 @@ pub struct Partition {
     guid: Uuid,
 
     /// Where it starts on disk
-    start: LogicalBlockAddress,
+    start: ByteSize,
 
     /// Where it ends on disk
-    end: LogicalBlockAddress,
+    end: ByteSize,
 
     /// Attributes
     // TODO: Bitflags
@@ -113,7 +113,7 @@ impl Partition {
         }
     }
 
-    pub(crate) fn from_bytes(source: &[u8]) -> Self {
+    pub(crate) fn from_bytes(source: &[u8], block_size: BlockSize) -> Self {
         #[allow(clippy::cast_ptr_alignment)]
         let part = unsafe { (source.as_ptr() as *const RawPartition).read_unaligned() };
         let mut name: GenericArray<u8, U70> = Default::default();
@@ -127,19 +127,19 @@ impl Partition {
         Partition {
             partition_type: PartitionType::from_uuid(uuid_hack(part.partition_type_guid)),
             guid: uuid_hack(part.partition_guid),
-            start: part.starting_lba,
-            end: part.ending_lba,
+            start: part.starting_lba * block_size,
+            end: part.ending_lba * block_size,
             attributes: part.attributes,
             name,
         }
     }
 
-    pub(crate) fn to_bytes(&self, dest: &mut [u8]) {
+    pub(crate) fn to_bytes(&self, dest: &mut [u8], block_size: BlockSize) {
         let mut raw = RawPartition::default();
         raw.partition_type_guid = *uuid_hack(*self.partition_type.to_uuid().as_bytes()).as_bytes();
         raw.partition_guid = *uuid_hack(*self.guid.as_bytes()).as_bytes();
-        raw.starting_lba = self.start;
-        raw.ending_lba = self.end;
+        raw.starting_lba = self.start / block_size;
+        raw.ending_lba = self.end / block_size;
         raw.attributes = self.attributes;
         self.name()
             .encode_utf16()
@@ -172,17 +172,13 @@ impl Partition {
         self.guid
     }
 
-    /// Partition starting block
-    ///
-    /// Note that these are only valid for a matching block and disk size.
-    pub fn start(&self) -> LogicalBlockAddress {
+    /// Partition starting offset
+    pub fn start(&self) -> ByteSize {
         self.start
     }
 
-    /// Partition ending block
-    ///
-    /// Note that these are only valid for a matching block and disk size.
-    pub fn end(&self) -> LogicalBlockAddress {
+    /// Partition ending offset
+    pub fn end(&self) -> ByteSize {
         self.end
     }
 }
@@ -201,7 +197,7 @@ mod tests {
     fn read_part() -> Result {
         let raw = data()?;
         let raw = &raw[OFFSET..];
-        let part = Partition::from_bytes(raw);
+        let part = Partition::from_bytes(raw, BLOCK_SIZE);
         assert_eq!(part.partition_type(), PartitionType::LinuxFilesystemData);
         Ok(())
     }
@@ -211,10 +207,10 @@ mod tests {
         let raw = data_parted()?;
         // Skip MBR and GPT header, first partition is there.
         let raw = &raw[OFFSET..];
-        let part = Partition::from_bytes(raw);
+        let part = Partition::from_bytes(raw, BLOCK_SIZE);
         assert_eq!("Test", part.name());
         let mut new_raw = [0; PARTITION_ENTRY_SIZE as usize];
-        part.to_bytes(&mut new_raw);
+        part.to_bytes(&mut new_raw, BLOCK_SIZE);
         assert_eq!(&new_raw[..], &raw[..PARTITION_ENTRY_SIZE as usize]);
         Ok(())
     }
@@ -230,15 +226,15 @@ mod tests {
         let part = Partition {
             partition_type: PartitionType::Unused,
             guid: Uuid::nil(),
-            start: LogicalBlockAddress(0),
-            end: LogicalBlockAddress(0),
+            start: Default::default(),
+            end: Default::default(),
             attributes: 0,
             name: *GenericArray::from_slice(&raw_name),
         };
         assert_eq!(name, part.name());
-        part.to_bytes(&mut raw);
+        part.to_bytes(&mut raw, BLOCK_SIZE);
         //
-        let part = Partition::from_bytes(&raw);
+        let part = Partition::from_bytes(&raw, BLOCK_SIZE);
         assert_eq!(name, part.name());
     }
 }

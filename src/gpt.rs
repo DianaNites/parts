@@ -216,7 +216,7 @@ where
             disk_size,
             |i, source| {
                 if i < partitions.len() {
-                    partitions[i] = Partition::from_bytes(source);
+                    partitions[i] = Partition::from_bytes(source, block_size);
                 }
             },
         )?;
@@ -254,7 +254,6 @@ where
     /// - The primary header array
     // TODO: When partition validity checks are done, they'll need to be rechecked
     // here. Make sure all partitions are within disk_size/usable blocks
-    // TODO: Make partition have byte offsets instead.
     pub fn to_bytes_with_size<F: FnMut(ByteSize, &[u8]) -> Result<()>>(
         &self,
         mut func: F,
@@ -275,7 +274,7 @@ where
             .into_iter()
             .filter(|p| *p != Partition::new())
         {
-            part.to_bytes(&mut partition_buf);
+            part.to_bytes(&mut partition_buf, block_size);
             digest.write(&partition_buf);
         }
         let parts_crc = digest.sum32();
@@ -298,7 +297,7 @@ where
             .filter(|p| *p != Partition::new())
             .enumerate()
         {
-            part.to_bytes(&mut partition_buf);
+            part.to_bytes(&mut partition_buf, block_size);
             let b = alt.array * block_size;
             let b = b + (ByteSize::from_bytes(PARTITION_ENTRY_SIZE as u64) * i as u64);
             func(b, &partition_buf)?;
@@ -321,7 +320,7 @@ where
             .filter(|p| *p != Partition::new())
             .enumerate()
         {
-            part.to_bytes(&mut partition_buf);
+            part.to_bytes(&mut partition_buf, block_size);
             let b = primary.array * block_size;
             let b = b + (ByteSize::from_bytes(PARTITION_ENTRY_SIZE as u64) * i as u64);
             func(b, &partition_buf)?;
