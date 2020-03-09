@@ -103,53 +103,49 @@ where
 }
 
 impl Gpt {
-    /// Read the full GPT from byte slices
+    /// Read the GPT from a byte slice
     ///
-    /// `primary` must contain LBA0 and LBA1. That is, `block_size * 2` bytes.
-    ///
-    /// `alt` must be the last LBA. That is, `block_size` bytes.
-    ///
-    /// `func` is called to read data. Errors are propagated.
-    /// It's arguments are a byte offset and a buffer to read into.
-    pub fn from_bytes<F: FnMut(ByteSize, &mut [u8]) -> Result<()>>(
-        primary: &[u8],
-        alt: &[u8],
-        func: F,
-        block_size: BlockSize,
-        disk_size: ByteSize,
-    ) -> Result<Self> {
-        // TODO: Remove func arg, wrap similar to (to/from)_(reader/writer)
-        Gpt::from_bytes_with_size(primary, alt, func, block_size, disk_size)
+    /// See [`Gpt::from_bytes_with_size`] if getting a slice of
+    /// the entire disk isn't possible.
+    pub fn from_bytes(source: &[u8], block_size: BlockSize, disk_size: ByteSize) -> Result<Self> {
+        let b_size = block_size.0 as usize;
+        let d_size = disk_size.as_bytes() as usize;
+        let primary = &source[..b_size * 2];
+        let alt = &source[d_size - b_size..];
+        Gpt::from_bytes_with_size(
+            primary,
+            alt,
+            |i, buf| {
+                let i = i.as_bytes() as usize;
+                let size = buf.len();
+                buf.copy_from_slice(&source[i..][..size]);
+                Ok(())
+            },
+            block_size,
+            disk_size,
+        )
     }
 
-    /// Write the full GPT
+    /// Write the full GPT to a byte slice
     ///
-    /// `disk_size` must be the size of the device.
-    ///
-    /// `func` will be called for every partition in the GPT.
-    ///
-    /// As an argument it receives the byte offset to write at, and
-    /// a buffer holding each partition entry, which must be written.
-    ///
-    /// It returns a [`Result`]<()>, and errors are propagated.
-    ///
-    /// # Details
-    ///
-    /// This will tell `func` to write, in order:
-    ///
-    /// - The Protective MBR
-    /// - The backup header
-    /// - The backup header array
-    /// - The primary header
-    /// - The primary header array
-    pub fn to_bytes<F: FnMut(ByteSize, &[u8]) -> Result<()>>(
+    /// See [`to_bytes_with_size`] if getting a slice of
+    /// the entire disk isn't possible,
+    /// and for details of what gets written and in what order.
+    pub fn to_bytes(
         &self,
-        func: F,
+        dest: &mut [u8],
         block_size: BlockSize,
         disk_size: ByteSize,
     ) -> Result<()> {
-        // TODO: Remove func arg, wrap similar to (to/from)_(reader/writer)
-        self.to_bytes_with_size(func, block_size, disk_size)
+        self.to_bytes_with_size(
+            |i, buf| {
+                let i = i.as_bytes() as usize;
+                dest[i..][..buf.len()].copy_from_slice(buf);
+                Ok(())
+            },
+            block_size,
+            disk_size,
+        )
     }
 }
 
@@ -189,6 +185,13 @@ where
     ///
     /// You probably don't want this method, but it can be useful
     /// if you're fine with only supporting a few partitions.
+    ///
+    /// `primary` must contain LBA0 and LBA1. That is, `block_size * 2` bytes.
+    ///
+    /// `alt` must be the last LBA. That is, `block_size` bytes.
+    ///
+    /// `func` is called to read data. Errors are propagated.
+    /// It's arguments are a byte offset and a buffer to read into.
     pub fn from_bytes_with_size<F: FnMut(ByteSize, &mut [u8]) -> Result<()>>(
         primary: &[u8],
         alt: &[u8],
@@ -231,7 +234,24 @@ where
 
     /// Like [`Gpt::to_bytes`] but stores `N` partitions.
     ///
-    /// See [`Gpt::from_bytes_with_size`] for more details.
+    /// `disk_size` must be the size of the device.
+    ///
+    /// `func` will be called to write data.
+    ///
+    /// As an argument it receives the byte offset to write at, and
+    /// a buffer of data to write.
+    ///
+    /// It returns a `Result<()>`, and errors are propagated.
+    ///
+    /// # Details
+    ///
+    /// This will tell `func` to write, in order:
+    ///
+    /// - The Protective MBR
+    /// - The backup header
+    /// - The backup header array
+    /// - The primary header
+    /// - The primary header array
     // TODO: When partition validity checks are done, they'll need to be rechecked
     // here. Make sure all partitions are within disk_size/usable blocks
     pub fn to_bytes_with_size<F: FnMut(ByteSize, &[u8]) -> Result<()>>(
@@ -492,6 +512,7 @@ mod tests {
         read_gpt_size::<U0>(&raw)?;
         read_gpt_size::<U64>(&raw)?;
         read_gpt_size::<U256>(&raw)?;
+        Gpt::from_bytes(&raw, BLOCK_SIZE, ByteSize::from_bytes(TEN_MIB_BYTES as u64))?;
         //
         expected_gpt(gpt);
         //
@@ -513,6 +534,14 @@ mod tests {
             ByteSize::from_bytes(TEN_MIB_BYTES as u64),
         )
         .map_err(anyhow::Error::msg)?;
+        let new_gpt = read_gpt_size::<U128>(&dest)?;
+        assert_eq!(new_gpt, gpt);
+        //
+        gpt.to_bytes(
+            &mut dest,
+            BLOCK_SIZE,
+            ByteSize::from_bytes(TEN_MIB_BYTES as u64),
+        )?;
         let new_gpt = read_gpt_size::<U128>(&dest)?;
         assert_eq!(new_gpt, gpt);
         Ok(())
