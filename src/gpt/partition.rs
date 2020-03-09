@@ -208,6 +208,8 @@ pub struct PartitionBuilder {
 
 impl PartitionBuilder {
     /// New builder
+    ///
+    /// `uuid` is a unique identifer for the partition.
     pub fn new(uuid: Uuid) -> Self {
         Self {
             start: Default::default(),
