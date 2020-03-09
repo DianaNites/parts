@@ -717,7 +717,7 @@ mod tests {
         let test_gpt = read_gpt_size::<U128>(&test_data)?;
         //
         let mut gpt: Gpt<U128> = Gpt::new();
-        unsafe { gpt.set_uuid(Uuid::parse_str(CF_DISK_GUID)?) };
+        gpt.set_uuid(Uuid::parse_str(CF_DISK_GUID)?);
         let part = PartitionBuilder::new(Uuid::parse_str(CF_PART_GUID)?)
             .start(ByteSize::from_mib(1))
             .size(ByteSize::from_mib(8))
