@@ -123,7 +123,8 @@ macro_rules! __from_uuid_match {
 }
 
 impl PartitionType {
-    pub(crate) fn to_uuid(self) -> Uuid {
+    /// Get UUID from PartitionType
+    pub fn to_uuid(self) -> Uuid {
         __to_uuid_match!(
             self,
             LegacyMbr,
@@ -148,7 +149,8 @@ impl PartitionType {
         )
     }
 
-    pub(crate) fn from_uuid(uuid: Uuid) -> Self {
+    /// Get PartitionType from UUID
+    pub fn from_uuid(uuid: Uuid) -> Self {
         let mut buf = Uuid::encode_buffer();
         let s = uuid.to_hyphenated().encode_upper(&mut buf);
         __from_uuid_match!(
