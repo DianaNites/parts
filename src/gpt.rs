@@ -342,6 +342,7 @@ where
         let last_lba = (disk_size / block_size) - 1;
         let mut primary = vec![0; (block_size.0 * 2) as usize];
         let mut alt = vec![0; block_size.0 as usize];
+        source.seek(SeekFrom::Start(0))?;
         source.read_exact(&mut primary)?;
         source.seek(SeekFrom::Start((last_lba * block_size).as_bytes()))?;
         source.read_exact(&mut alt)?;
@@ -507,6 +508,7 @@ mod tests {
         ArrayLength,
     };
     use static_assertions::*;
+    use std::io;
 
     assert_eq_size!(RawPartition, [u8; PARTITION_ENTRY_SIZE as usize]);
     assert_eq_size!(
@@ -724,6 +726,33 @@ mod tests {
             .partition_type(PartitionType::LinuxFilesystemData);
         gpt.add_partition(part.finish(BLOCK_SIZE))?;
         assert_eq!(gpt, test_gpt);
+        Ok(())
+    }
+
+    /// Test that a newly created Gpt has no partitions
+    #[test]
+    fn empty_partitions() -> Result {
+        let mut data = vec![0; TEN_MIB_BYTES];
+        let size = ByteSize::from_bytes(TEN_MIB_BYTES as u64);
+        let gpt = Gpt::new();
+        gpt.to_bytes(&mut data, BLOCK_SIZE, size)?;
+        let gpt = Gpt::from_bytes(&data, BLOCK_SIZE, size)?;
+        assert_eq!(gpt.partitions().len(), 0);
+        //
+        Ok(())
+    }
+
+    /// Test that a newly created Gpt has no partitions
+    #[test]
+    fn empty_partitions_std() -> Result {
+        let data = vec![0; TEN_MIB_BYTES];
+        let mut data = io::Cursor::new(data);
+        let size = ByteSize::from_bytes(TEN_MIB_BYTES as u64);
+        let gpt = Gpt::new();
+        gpt.to_writer(&mut data, BLOCK_SIZE, size)?;
+        let gpt = Gpt::from_reader(&mut data, BLOCK_SIZE, size)?;
+        assert_eq!(gpt.partitions().len(), 0);
+        //
         Ok(())
     }
 }
