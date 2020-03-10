@@ -1,4 +1,5 @@
 //! Types for use in [`crate::Gpt`]
+use core::ops;
 use derive_more::*;
 
 /// Helper to define ByteSize from_* setters.
@@ -43,54 +44,163 @@ macro_rules! __ByteSizeImplAs {
 /// Represents a devices Block Size, in bytes.
 ///
 /// This is usually either `512` or `4096`, but can be any value.
-///
-/// This type always has the same representation as a [`u64`]
-///
-/// # Examples
-///
-/// Some basic math
-///
-/// ```rust
-/// # use parts::types::*;
-/// let block = BlockSize(512);
-/// assert_eq!(block * 2, BlockSize(1024));
-/// assert_eq!(block / 2, BlockSize(256));
-/// ```
-///
-/// This doesn't compile, adding or subtracting
-/// arbitrary numbers from a BlockSize isn't valid.
-///
-/// ```rust,compile_fail
-/// # use parts::types::*;
-/// let block = BlockSize(512);
-/// // Doesn't compile, adding/subtracting
-/// // arbitrary numbers from blocks isn't valid.
-/// assert_eq!(block + 2, 514);
-/// assert_eq!(block - 2, 510);
-/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, From, Into, Display)]
+#[repr(transparent)]
+pub struct BlockSize(pub u64);
+
+/// Represents a byte offset
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default, Display, Into, From)]
+#[repr(transparent)]
+pub struct Offset(u64);
+
+impl Offset {
+    /// New offset
+    pub(crate) fn new(offset: u64) -> Self {
+        Self(offset)
+    }
+}
+
+/// Represents a size
 #[derive(
-    Debug,
-    Display,
-    From,
-    Add,
-    Sub,
-    Mul,
-    Div,
-    AddAssign,
-    SubAssign,
-    MulAssign,
-    DivAssign,
-    Clone,
     Copy,
+    Clone,
     PartialEq,
     Eq,
     PartialOrd,
     Ord,
     Hash,
+    Debug,
     Default,
+    Display,
+    Into,
+    From,
+    Add,
+    Sub,
+    Mul,
+    AddAssign,
+    SubAssign,
+    MulAssign,
+    DivAssign,
+    RemAssign,
 )]
+#[display(fmt = "{} Bytes", _0)]
 #[repr(transparent)]
-pub struct BlockSize(pub u64);
+pub struct Size(u64);
+
+impl Size {
+    __ByteSizeImplFrom!("Bytes", from_bytes, 0);
+    __ByteSizeImplFrom!("KiB", from_kib, 1);
+    __ByteSizeImplFrom!("MiB", from_mib, 2);
+    __ByteSizeImplFrom!("GiB", from_gib, 3);
+    __ByteSizeImplFrom!("TiB", from_tib, 4);
+    __ByteSizeImplFrom!("PiB", from_pib, 5);
+    //
+    __ByteSizeImplAs!("Bytes", as_bytes, 0);
+    __ByteSizeImplAs!("KiB", as_kib, 1);
+    __ByteSizeImplAs!("MiB", as_mib, 2);
+    __ByteSizeImplAs!("GiB", as_gib, 3);
+    __ByteSizeImplAs!("TiB", as_tib, 4);
+    __ByteSizeImplAs!("PiB", as_pib, 5);
+}
+
+/// A [`Size`] from an [`Offset`]
+impl From<Offset> for Size {
+    fn from(o: Offset) -> Self {
+        Self(o.0)
+    }
+}
+
+/// A [`Size`] from a [`BlockSize`]
+impl From<BlockSize> for Size {
+    fn from(o: BlockSize) -> Self {
+        Self(o.0)
+    }
+}
+
+impl ops::Add<BlockSize> for Size {
+    type Output = Size;
+
+    fn add(self, rhs: BlockSize) -> Self::Output {
+        self + Size(rhs.0)
+    }
+}
+
+impl ops::AddAssign<BlockSize> for Size {
+    fn add_assign(&mut self, rhs: BlockSize) {
+        *self += Size(rhs.0);
+    }
+}
+
+impl ops::Sub<BlockSize> for Size {
+    type Output = Size;
+
+    fn sub(self, rhs: BlockSize) -> Self::Output {
+        self - Size(rhs.0)
+    }
+}
+
+impl ops::SubAssign<BlockSize> for Size {
+    fn sub_assign(&mut self, rhs: BlockSize) {
+        *self -= Size(rhs.0);
+    }
+}
+
+/// Represents a Logical Block Address
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Display)]
+#[display(fmt = "Block {}", block)]
+pub struct Block {
+    block: u64,
+    size: BlockSize,
+}
+
+impl Block {
+    /// Create a new Block
+    pub fn new(block: u64, block_size: BlockSize) -> Self {
+        Self {
+            block,
+            size: block_size,
+        }
+    }
+
+    /// Get the [`Offset`] representing this Block
+    pub fn into_offset(self) -> Offset {
+        Offset(self.block * self.size.0)
+    }
+}
+
+impl ops::Add<u64> for Block {
+    type Output = Block;
+
+    fn add(self, rhs: u64) -> Self::Output {
+        Self {
+            block: self.block + rhs,
+            size: self.size,
+        }
+    }
+}
+
+impl ops::AddAssign<u64> for Block {
+    fn add_assign(&mut self, rhs: u64) {
+        self.block += rhs;
+    }
+}
+
+impl ops::Sub<u64> for Block {
+    type Output = Block;
+
+    fn sub(self, rhs: u64) -> Self::Output {
+        Self {
+            block: self.block - rhs,
+            size: self.size,
+        }
+    }
+}
+
+impl ops::SubAssign<u64> for Block {
+    fn sub_assign(&mut self, rhs: u64) {
+        self.block -= rhs;
+    }
+}
 
 /// A `ByteSize` type represents a size, in bytes.
 ///
