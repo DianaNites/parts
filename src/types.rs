@@ -51,12 +51,20 @@ pub struct BlockSize(pub u64);
 /// Represents a byte offset
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default, Display, Into, From)]
 #[repr(transparent)]
-pub struct Offset(u64);
+pub struct Offset(pub u64);
 
-impl Offset {
-    /// New offset
-    pub(crate) fn new(offset: u64) -> Self {
-        Self(offset)
+impl ops::Div<BlockSize> for Offset {
+    type Output = Block;
+
+    fn div(self, rhs: BlockSize) -> Self::Output {
+        let block = self.0 / rhs.0;
+        Block::new(block, rhs)
+    }
+}
+
+impl From<Size> for Offset {
+    fn from(s: Size) -> Self {
+        Offset(s.as_bytes())
     }
 }
 
@@ -199,6 +207,13 @@ impl ops::Sub<u64> for Block {
 impl ops::SubAssign<u64> for Block {
     fn sub_assign(&mut self, rhs: u64) {
         self.block -= rhs;
+    }
+}
+
+/// The logical block
+impl From<Block> for u64 {
+    fn from(b: Block) -> Self {
+        b.block
     }
 }
 

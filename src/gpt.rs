@@ -293,9 +293,9 @@ where
         );
         // Verify all partitions are within bounds
         for part in self.partitions() {
-            if ((part.start() / block_size) < alt.first_usable)
-                || ((part.end() / block_size) > alt.last_usable)
-            {
+            let a = LogicalBlockAddress((part.start() / block_size).into());
+            let b = LogicalBlockAddress((part.end() / block_size).into());
+            if (a < alt.first_usable) || (b > alt.last_usable) {
                 return Err(Error::NotEnough);
             }
         }
@@ -709,8 +709,8 @@ mod tests {
         let raw = data().unwrap();
         let mut gpt = read_gpt_size::<U128>(&raw).unwrap();
         let part = PartitionBuilder::new(Uuid::new_v4())
-            .start(ByteSize::from_mib(0))
-            .size(ByteSize::from_mib(1))
+            .start(Size::from_mib(1).into())
+            .size(Size::from_mib(1))
             .finish(BLOCK_SIZE);
         let e = gpt.add_partition(part).unwrap_err();
         panic!(e.to_string());
@@ -725,8 +725,8 @@ mod tests {
         let mut gpt: Gpt<U128> = Gpt::new();
         gpt.set_uuid(Uuid::parse_str(CF_DISK_GUID)?);
         let part = PartitionBuilder::new(Uuid::parse_str(CF_PART_GUID)?)
-            .start(ByteSize::from_mib(1))
-            .size(ByteSize::from_mib(8))
+            .start(Size::from_mib(1).into())
+            .size(Size::from_mib(8))
             .partition_type(PartitionType::LinuxFilesystemData);
         gpt.add_partition(part.finish(BLOCK_SIZE))?;
         assert_eq!(gpt, test_gpt);

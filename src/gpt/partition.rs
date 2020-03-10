@@ -62,10 +62,10 @@ pub struct RawPartition {
     partition_guid: [u8; 16],
 
     /// Where it starts on disk
-    starting_lba: LogicalBlockAddress,
+    starting_lba: u64,
 
     /// Where it ends on disk
-    ending_lba: LogicalBlockAddress,
+    ending_lba: u64,
 
     /// Attributes
     attributes: u64,
@@ -88,10 +88,10 @@ pub struct Partition {
     guid: Uuid,
 
     /// Where it starts on disk
-    start: ByteSize,
+    start: Offset,
 
     /// Where it ends on disk
-    end: ByteSize,
+    end: Offset,
 
     /// Attributes
     // TODO: Bitflags
@@ -128,8 +128,8 @@ impl Partition {
         Partition {
             partition_type: PartitionType::from_uuid(uuid_hack(part.partition_type_guid)),
             guid: uuid_hack(part.partition_guid),
-            start: part.starting_lba * block_size,
-            end: part.ending_lba * block_size,
+            start: Block::new(part.starting_lba, block_size).into_offset(),
+            end: Block::new(part.ending_lba, block_size).into_offset(),
             attributes: part.attributes,
             name,
         }
@@ -139,8 +139,8 @@ impl Partition {
         let mut raw = RawPartition::default();
         raw.partition_type_guid = *uuid_hack(*self.partition_type.to_uuid().as_bytes()).as_bytes();
         raw.partition_guid = *uuid_hack(*self.guid.as_bytes()).as_bytes();
-        raw.starting_lba = self.start / block_size;
-        raw.ending_lba = self.end / block_size;
+        raw.starting_lba = (self.start / block_size).into();
+        raw.ending_lba = (self.end / block_size).into();
         raw.attributes = self.attributes;
         self.name()
             .encode_utf16()
@@ -174,12 +174,12 @@ impl Partition {
     }
 
     /// Partition starting offset
-    pub fn start(&self) -> ByteSize {
+    pub fn start(&self) -> Offset {
         self.start
     }
 
     /// Partition ending offset
-    pub fn end(&self) -> ByteSize {
+    pub fn end(&self) -> Offset {
         self.end
     }
 }
@@ -187,8 +187,8 @@ impl Partition {
 #[derive(Debug)]
 enum End {
     None,
-    Abs(ByteSize),
-    Rel(ByteSize),
+    Abs(Offset),
+    Rel(Size),
 }
 
 impl Default for End {
@@ -199,7 +199,7 @@ impl Default for End {
 
 /// Create a Partition
 pub struct PartitionBuilder {
-    start: ByteSize,
+    start: Offset,
     end: End,
     partition_type: PartitionType,
     uuid: Uuid,
@@ -221,7 +221,7 @@ impl PartitionBuilder {
     }
 
     /// Partition start. Required.
-    pub fn start(mut self, start: ByteSize) -> Self {
+    pub fn start(mut self, start: Offset) -> Self {
         self.start = start;
         self
     }
@@ -229,7 +229,7 @@ impl PartitionBuilder {
     /// Partition end. Required.
     ///
     /// Call one of this or [`PartitionBuilder::size`]
-    pub fn end(mut self, end: ByteSize) -> Self {
+    pub fn end(mut self, end: Offset) -> Self {
         self.end = End::Abs(end);
         self
     }
@@ -237,7 +237,7 @@ impl PartitionBuilder {
     /// Partition size. Required.
     ///
     /// Call one of this or [`PartitionBuilder::size`]
-    pub fn size(mut self, size: ByteSize) -> Self {
+    pub fn size(mut self, size: Size) -> Self {
         self.end = End::Rel(size);
         self
     }
@@ -267,9 +267,10 @@ impl PartitionBuilder {
     pub fn finish(self, block_size: BlockSize) -> Partition {
         let end = match self.end {
             End::Abs(end) => end,
-            End::Rel(end) => (self.start + end),
+            End::Rel(end) => Offset(self.start.0 + end.as_bytes()),
             End::None => panic!("Invalid Partition Creation"),
-        } - ByteSize::from_bytes(block_size.0);
+        };
+        let end = Offset(end.0 - block_size.0);
         Partition {
             partition_type: self.partition_type,
             guid: self.uuid,
