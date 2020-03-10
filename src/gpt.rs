@@ -340,7 +340,7 @@ where
         disk_size: ByteSize,
     ) -> Result<Self> {
         let last_lba = (disk_size / block_size) - 1;
-        let mut primary = vec![0; block_size.0 as usize * 2];
+        let mut primary = vec![0; (block_size.0 * 2) as usize];
         let mut alt = vec![0; block_size.0 as usize];
         source.read_exact(&mut primary)?;
         source.seek(SeekFrom::Start((last_lba * block_size).as_bytes()))?;
