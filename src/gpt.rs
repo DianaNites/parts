@@ -268,7 +268,7 @@ where
         disk_size: ByteSize,
     ) -> Result<()> {
         let last_lba = (disk_size / block_size) - 1;
-        let mbr = ProtectiveMbr::new(last_lba);
+        let mbr = ProtectiveMbr::new(Block::new(last_lba.0, block_size));
         let mut mbr_buf = [0; MBR_SIZE];
         mbr.to_bytes(&mut mbr_buf);
         func(ByteSize::from_bytes(0), &mbr_buf)?;

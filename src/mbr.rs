@@ -46,7 +46,8 @@ impl ProtectiveMbr {
     /// Creates a new Protective MBR
     ///
     /// `last_lba`, the last usable logical block address on the device.
-    pub fn new(last_lba: LogicalBlockAddress) -> Self {
+    pub fn new(last_lba: Block) -> Self {
+        let last_lba: u64 = last_lba.into();
         Self {
             boot_code: GenericArray::default(),
             unique_signature: [0u8; 4],
@@ -67,7 +68,7 @@ impl ProtectiveMbr {
                     end_track: 0xFF,
                     //
                     start_lba: 0x01,
-                    size_lba: u32::try_from(last_lba.0).unwrap_or(u32::max_value()),
+                    size_lba: u32::try_from(last_lba).unwrap_or(u32::max_value()),
                 },
                 MbrPart::default(),
                 MbrPart::default(),
