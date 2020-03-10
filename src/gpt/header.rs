@@ -166,6 +166,12 @@ pub struct Header {
 }
 
 impl Header {
+    /// `partitions` MUST be the >= 128.
+    /// parted, cfdisk, and presumably others will CRASH if this is not the
+    /// case.
+    ///
+    /// `partitions_crc32` MUST be calculated over this range,
+    /// even if all zeros
     pub fn new(
         this: LogicalBlockAddress,
         alt: LogicalBlockAddress,

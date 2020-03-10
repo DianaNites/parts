@@ -90,6 +90,10 @@ fn validate<F: FnMut(ByteSize, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])
 ///
 /// Regardless of `N`, when reading the full partition array *is* still
 /// validated.
+///
+/// **Warning:** Using values of `N` less than `128` may cause the Gpt
+/// to be considered invalid by other tools or hardware.
+// TODO: No writing for any N?
 #[derive(Copy, Clone, PartialEq)]
 pub struct Gpt<N = U128>
 where
@@ -271,7 +275,7 @@ where
         //
         let mut partition_buf = [0; PARTITION_ENTRY_SIZE as usize];
         let mut digest = crc32::Digest::new(crc32::IEEE);
-        for part in self.partitions() {
+        for part in self.partitions {
             part.to_bytes(&mut partition_buf, block_size);
             digest.write(&partition_buf);
         }
@@ -281,7 +285,7 @@ where
         let alt = Header::new(
             last_lba,
             LogicalBlockAddress(1),
-            self.partitions_len as u32,
+            self.partitions.len() as u32,
             parts_crc,
             disk_uuid,
             block_size,
@@ -301,7 +305,7 @@ where
         let primary = Header::new(
             LogicalBlockAddress(1),
             last_lba,
-            self.partitions_len as u32,
+            self.partitions.len() as u32,
             parts_crc,
             disk_uuid,
             block_size,
@@ -471,7 +475,7 @@ where
         //
         header.to_bytes(&mut header_buf);
         func(last_lba * block_size, &header_buf)?;
-        for (i, part) in self.partitions().iter().enumerate() {
+        for (i, part) in self.partitions.iter().enumerate() {
             part.to_bytes(&mut partition_buf, block_size);
             let b = header.array * block_size;
             let b = b + (ByteSize::from_bytes(PARTITION_ENTRY_SIZE as u64) * i as u64);
