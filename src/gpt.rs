@@ -59,7 +59,7 @@ fn validate<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])>(
     Ok(())
 }
 
-trait GptHelper<C> {
+pub trait GptHelper<C> {
     const SIZE: usize;
 
     fn new() -> C;
@@ -154,23 +154,24 @@ impl GptHelper<Vec<Partition>> for Vec<Partition> {
 /// `GptC` supporting only 4 partitions.
 ///
 /// ```rust
-/// # use parts::{arrayvec::ArrayVec, GptC, Partition};
-/// let gpt: GptC<ArrayVec<[Partition; 4]>> = GptC::new();
+/// # use parts::{arrayvec::ArrayVec, GptC, Partition, uuid::Uuid};
+/// let gpt: GptC<ArrayVec<[Partition; 4]>> = GptC::new(Uuid::new_v4());
 /// ```
 #[derive(Debug, PartialEq)]
-struct GptC<C> {
+pub struct GptC<C> {
     uuid: Uuid,
     partitions: C,
 }
 
+/// See [`GptC`] for docs.
 #[cfg(not(feature = "std"))]
-type Gpt<C = ArrayVec<[Partition; 128]>> = GptC<C>;
+pub type Gpt<C = ArrayVec<[Partition; 128]>> = GptC<C>;
 
+/// See [`GptC`] for docs.
 #[cfg(feature = "std")]
-type Gpt<C = std::vec::Vec<Partition>> = GptC<C>;
+pub type Gpt<C = std::vec::Vec<Partition>> = GptC<C>;
 
 // Public APIs
-#[allow(dead_code)]
 impl<C: GptHelper<C>> Gpt<C> {
     /// New empty Gpt
     ///
@@ -472,7 +473,6 @@ impl<C: GptHelper<C>> Gpt<C> {
 }
 
 // Private APIs
-#[allow(dead_code)]
 impl<C: GptHelper<C>> GptC<C> {
     fn check_overlap(&mut self, part: &Partition) -> Result<()> {
         for existing in self.partitions() {

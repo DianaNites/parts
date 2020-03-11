@@ -46,6 +46,8 @@ pub mod types;
 pub use gpt::{
     error::Error,
     partition::{Partition, PartitionBuilder},
+    Gpt,
+    GptC,
 };
 pub use partitions::*;
 
