@@ -20,7 +20,7 @@
 //! # fn main() -> Result<(), Box<dyn Error>> {
 //! # let image = File::open("tests/data/test_parts_cf")?;
 //! # let disk_size = Size::from_bytes(10_485_760);
-//! let mut gpt = Gpt::from_reader(image, BlockSize(512), disk_size)?;
+//! let mut gpt: Gpt = Gpt::from_reader(image, BlockSize(512), disk_size)?;
 //! for part in gpt.partitions() {
 //!     println!("Partition Name: {}", part.name());
 //!     println!("Partition Type: {}", part.partition_type());
