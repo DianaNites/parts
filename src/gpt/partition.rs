@@ -262,7 +262,7 @@ impl PartitionBuilder {
 
     /// Partition size. Required.
     ///
-    /// Call one of this or [`PartitionBuilder::size`]
+    /// Call one of this or [`PartitionBuilder::end`]
     pub fn size(mut self, size: Size) -> Self {
         self.end = End::Rel(size);
         self
