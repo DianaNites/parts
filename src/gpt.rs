@@ -519,6 +519,12 @@ mod test_no_std {
     use static_assertions::*;
     use uuid::Uuid;
 
+    // FIXME: should be from crate::util
+    const BLOCK_SIZE: BlockSize = BlockSize(512);
+    const TEN_MIB_BYTES: usize = 10_485_760;
+
+    type DefArray = ArrayVec<[Partition; 128]>;
+
     #[cfg(feature = "std")]
     assert_eq_size!(Gpt, [u8; mem::size_of::<Uuid>() + Vec::<Partition>::SIZE]);
 
@@ -531,22 +537,22 @@ mod test_no_std {
     #[test]
     #[should_panic = "Invalid Protective MBR"]
     fn missing_mbr_test() {
-        let raw = [0; 1024];
-        let _gpt: Gpt = Gpt::from_bytes(&raw, BlockSize(512), Size::from_bytes(1024)).unwrap();
+        let raw = [0; (BLOCK_SIZE.0 * 2) as usize];
+        let _gpt: Gpt =
+            Gpt::from_bytes(&raw, BLOCK_SIZE, Size::from_bytes(BLOCK_SIZE.0 * 2)).unwrap();
     }
 
     /// Prevent adding overlapping partitions
     #[test]
     #[should_panic(expected = "Attempted to add overlapping partitions")]
     fn invalid_partitions() {
-        let block_size = BlockSize(512);
         let mut gpt: Gpt = Gpt::new(Uuid::nil());
         let part = PartitionBuilder::new(Uuid::nil())
             .start(Offset(0))
             .end(Offset(512))
             .partition_type(PartitionType::Unused);
-        gpt.add_partition(part.finish(block_size)).unwrap();
-        let e = gpt.add_partition(part.finish(block_size)).unwrap_err();
+        gpt.add_partition(part.finish(BLOCK_SIZE)).unwrap();
+        let e = gpt.add_partition(part.finish(BLOCK_SIZE)).unwrap_err();
         panic!(e.to_string());
     }
 
@@ -554,13 +560,32 @@ mod test_no_std {
     #[test]
     #[should_panic(expected = "Invalid Partition Size")]
     fn invalid_partitions_size() {
-        let block_size = BlockSize(512);
         let mut gpt: Gpt = Gpt::new(Uuid::nil());
         let part = PartitionBuilder::new(Uuid::nil())
             .start(Offset(0))
             .end(Offset(0))
             .partition_type(PartitionType::Unused);
-        gpt.add_partition(part.finish(block_size)).unwrap();
+        gpt.add_partition(part.finish(BLOCK_SIZE)).unwrap();
+    }
+
+    /// Don't panic on slice indexing if given an empty slice,
+    /// and don't allow an empty disk
+    #[test]
+    fn empty_regress() {
+        let gpt =
+            Gpt::<DefArray>::from_bytes(&[], BLOCK_SIZE, Size::from_bytes(TEN_MIB_BYTES as u64));
+        let e = gpt.unwrap_err();
+        if let Error::NotEnough = e {
+        } else {
+            panic!("Wrong error");
+        }
+        //
+        let gpt = Gpt::<DefArray>::from_bytes(&[], BLOCK_SIZE, Size::from_bytes(0));
+        let e = gpt.unwrap_err();
+        if let Error::NotEnough = e {
+        } else {
+            panic!("Empty disk was allowed");
+        }
     }
 }
 
@@ -673,30 +698,6 @@ mod test {
         expected_gpt(gpt);
         //
         Ok(())
-    }
-
-    /// Don't panic on slice indexing if given an empty slice,
-    /// and don't allow an empty disk
-    #[test]
-    fn empty_regress() {
-        let raw = StdVec::new();
-        let gpt = Gpt::<Vec>::from_bytes(
-            raw.as_slice(),
-            BLOCK_SIZE,
-            Size::from_bytes(TEN_MIB_BYTES as u64),
-        );
-        let e = gpt.unwrap_err();
-        if let Error::NotEnough = e {
-        } else {
-            panic!("Wrong error");
-        }
-        //
-        let gpt = Gpt::<Vec>::from_bytes(raw.as_slice(), BLOCK_SIZE, Size::from_bytes(0));
-        let e = gpt.unwrap_err();
-        if let Error::NotEnough = e {
-        } else {
-            panic!("Empty disk was allowed");
-        }
     }
 
     /// Make sure that writing out a GptC<ArrayVec<[Partition; N]>> is valid
