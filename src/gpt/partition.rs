@@ -262,13 +262,18 @@ impl PartitionBuilder {
     /// # Panics
     ///
     /// - If not all required methods were called.
+    /// - If the size is not at least `block_size`
     pub fn finish(self, block_size: BlockSize) -> Partition {
         let end = match self.end {
             End::Abs(end) => end,
             End::Rel(end) => Offset(self.start.0 + end.as_bytes()),
             End::None => panic!("Invalid Partition Creation"),
         };
-        let end = Offset(end.0 - block_size.0);
+        let end = Offset(
+            end.0
+                .checked_sub(block_size.0)
+                .expect("Invalid Partition Size"),
+        );
         Partition {
             partition_type: self.partition_type,
             guid: self.uuid,
