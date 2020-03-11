@@ -50,6 +50,7 @@ pub use gpt::{
 pub use partitions::*;
 
 // Re-exports
+pub use arrayvec;
 #[doc(inline)]
 pub use generic_array::typenum;
 #[doc(inline)]
