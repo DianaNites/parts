@@ -5,14 +5,8 @@ use crate::{
     types::*,
 };
 use arrayvec::{Array, ArrayVec};
-use core::{convert::TryInto, fmt};
+use core::{convert::TryInto, mem};
 use crc::{crc32, Hasher32};
-use generic_array::{
-    sequence::GenericSequence,
-    typenum::{Unsigned, U128},
-    ArrayLength,
-    GenericArray,
-};
 #[cfg(feature = "std")]
 use std::io::{prelude::*, SeekFrom};
 use uuid::Uuid;
@@ -65,15 +59,9 @@ fn validate<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])>(
     Ok(())
 }
 
-fn default_partitions<N>() -> GenericArray<Partition, N>
-where
-    N: ArrayLength<Partition> + Unsigned,
-    N::ArrayType: Copy,
-{
-    GenericArray::<Partition, N>::generate(|_| Partition::new())
-}
-
 trait _GptHelper<C> {
+    const SIZE: usize;
+
     fn new() -> C;
 
     fn as_slice(&self) -> &[Partition];
@@ -86,6 +74,8 @@ trait _GptHelper<C> {
 }
 
 impl<N: Array<Item = Partition>> _GptHelper<ArrayVec<N>> for ArrayVec<N> {
+    const SIZE: usize = mem::size_of::<ArrayVec<N>>();
+
     fn new() -> ArrayVec<N> {
         ArrayVec::new()
     }
@@ -109,6 +99,8 @@ impl<N: Array<Item = Partition>> _GptHelper<ArrayVec<N>> for ArrayVec<N> {
 
 #[cfg(feature = "std")]
 impl _GptHelper<Vec<Partition>> for Vec<Partition> {
+    const SIZE: usize = mem::size_of::<Vec<Partition>>();
+
     fn new() -> Vec<Partition> {
         // TODO: Const
         Vec::with_capacity(128)
@@ -132,6 +124,38 @@ impl _GptHelper<Vec<Partition>> for Vec<Partition> {
     }
 }
 
+/// Represents a GUID Partition Table
+///
+/// Note that all modifications are done in-memory
+/// and *only* effect partition entries, not the data in them.
+///
+/// # Memory
+///
+/// When using `std`, partitions are by default stored in a `Vec`,
+/// and there is no limit to how many can be read/written.
+///
+/// But when `no_std`, partitions are stored in an `ArrayVec`,
+/// and will by default use `16KiB + ??? bytes` of space.
+///
+/// This is because the GPT spec requires a minimum of 16KiB reserved
+/// for the partition array.
+///
+/// If you are particularly memory-constrained, or need to support more
+/// partitions, this type is generic over the container.
+///
+/// WARNING: Partitions can be effectively lost this way, during writing.
+/// If there are 5 partitions and you constrain `_Gpt` to support only 4,
+/// it's only possible to write the 4 back out,
+/// the 5th will not be included in the partition CRC or array.
+///
+/// # Examples
+///
+/// _Gpt supporting only 4 partitions.
+///
+/// ```rust
+/// # use parts::_Gpt;
+/// let gpt: _GptC<ArrayVec<[Partition; 4]>> = _Gpt::new();
+/// ```
 #[derive(Debug, PartialEq)]
 struct _GptC<C> {
     uuid: Uuid,
@@ -144,6 +168,7 @@ type _Gpt<C = ArrayVec<[Partition; 128]>> = _GptC<C>;
 #[cfg(feature = "std")]
 type _Gpt<C = std::vec::Vec<Partition>> = _GptC<C>;
 
+// Public APIs
 #[allow(dead_code)]
 impl<C: _GptHelper<C>> _Gpt<C> {
     /// New empty Gpt
@@ -156,7 +181,18 @@ impl<C: _GptHelper<C>> _Gpt<C> {
         }
     }
 
+    /// Read the Gpt from `source`
+    ///
+    /// # Errors
+    ///
+    /// - If the GPT is invalid
+    /// - If `source` is not `disk_size`
     pub fn from_bytes(source: &[u8], block_size: BlockSize, disk_size: Size) -> Result<Self> {
+        assert_eq!(
+            source.len(),
+            disk_size.as_bytes().try_into().unwrap(),
+            "Invalid source"
+        );
         let b_size = block_size.0 as usize;
         let d_size = disk_size.as_bytes() as usize;
         let primary = &source[..b_size * 2];
@@ -175,6 +211,23 @@ impl<C: _GptHelper<C>> _Gpt<C> {
         )
     }
 
+    /// Read the Gpt using `func`.
+    ///
+    /// `primary` must contain LBA0 and LBA1, for a length of `block_size * 2`
+    /// bytes.
+    ///
+    /// `alt` must contain the last LBA, for a length of `block_size` bytes.
+    ///
+    /// `func` receives a byte offset into the device,
+    /// and a buffer to read into.
+    ///
+    /// See [`_Gpt::from_bytes`] for more details.
+    ///
+    /// # Errors
+    ///
+    /// - If `func` does.
+    ///
+    /// # Examples
     pub fn from_bytes_with_func<F: FnMut(Offset, &mut [u8]) -> Result<()>>(
         primary: &[u8],
         alt: &[u8],
@@ -208,6 +261,13 @@ impl<C: _GptHelper<C>> _Gpt<C> {
         })
     }
 
+    /// Read the Gpt from `source`
+    ///
+    /// See [`_Gpt::from_bytes`] for more details.
+    ///
+    /// # Errors
+    ///
+    /// - If I/O does.
     #[cfg(feature = "std")]
     pub fn from_reader<RS: Read + Seek>(
         mut source: RS,
@@ -235,7 +295,31 @@ impl<C: _GptHelper<C>> _Gpt<C> {
         Ok(gpt)
     }
 
+    /// Write the Gpt to `dest`.
+    ///
+    /// # Errors
+    ///
+    /// - If all partitions do not fit within the usable blocks
+    ///
+    /// # Panics
+    ///
+    /// - If dest is not `disk_size`
+    ///
+    /// # Details
+    ///
+    /// The Gpt will be written in the following order
+    ///
+    /// - The Protective MBR
+    /// - The backup header
+    /// - The backup partition array
+    /// - The primary header
+    /// - The primary partition array
     pub fn to_bytes(&self, dest: &mut [u8], block_size: BlockSize, disk_size: Size) -> Result<()> {
+        assert_eq!(
+            dest.len(),
+            disk_size.as_bytes().try_into().unwrap(),
+            "Invalid dest"
+        );
         self.to_bytes_with_func(
             |i, buf| {
                 let i = i.0 as usize;
@@ -247,6 +331,18 @@ impl<C: _GptHelper<C>> _Gpt<C> {
         )
     }
 
+    /// Write the Gpt using `func`.
+    ///
+    /// `func` receives a byte offset into the device,
+    /// and a buffer to write to the device.
+    ///
+    /// See [`_Gpt::to_bytes`] for more details.
+    ///
+    /// # Errors
+    ///
+    /// - If `func` does.
+    ///
+    /// # Examples
     pub fn to_bytes_with_func<F: FnMut(Offset, &[u8]) -> Result<()>>(
         &self,
         mut func: F,
@@ -303,6 +399,13 @@ impl<C: _GptHelper<C>> _Gpt<C> {
         Ok(())
     }
 
+    /// Write the Gpt to `dest`
+    ///
+    /// See [`_Gpt::to_bytes`] for more details.
+    ///
+    /// # Errors
+    ///
+    /// - If I/O does.
     #[cfg(feature = "std")]
     pub fn to_writer<WS: Write + Seek>(
         &self,
@@ -363,9 +466,11 @@ impl<C: _GptHelper<C>> _Gpt<C> {
     pub fn set_uuid(&mut self, uuid: Uuid) {
         self.uuid = uuid;
     }
+
+    // TODO: First/last usable block getters, and remaining. Store disk/block size?
 }
 
-/// Private APIs
+// Private APIs
 #[allow(dead_code)]
 impl<C: _GptHelper<C>> _GptC<C> {
     fn check_overlap(&mut self, part: &Partition) -> Result<()> {
@@ -400,7 +505,61 @@ impl<C: _GptHelper<C>> _GptC<C> {
     }
 }
 
+/// Tests that should work without std
 #[cfg(test)]
+mod test_new_no_std {
+    use super::*;
+    use crate::PartitionType;
+    use core::mem;
+    use static_assertions::*;
+    use uuid::Uuid;
+
+    #[cfg(feature = "std")]
+    assert_eq_size!(_Gpt, [u8; mem::size_of::<Uuid>() + Vec::<Partition>::SIZE]);
+
+    #[cfg(not(feature = "std"))]
+    assert_eq_size!(
+        _Gpt,
+        [u8; mem::size_of::<Uuid>() + ArrayVec::<[Partition; 128]>::SIZE]
+    );
+
+    #[test]
+    #[should_panic = "Invalid Protective MBR"]
+    fn missing_mbr_test() {
+        let raw = [0; 1024];
+        let _gpt: _Gpt = _Gpt::from_bytes(&raw, BlockSize(512), Size::from_bytes(1024)).unwrap();
+    }
+
+    /// Prevent adding overlapping partitions
+    #[test]
+    #[should_panic(expected = "Attempted to add overlapping partitions")]
+    fn invalid_partitions() {
+        let block_size = BlockSize(512);
+        let mut gpt: _Gpt = _Gpt::new(Uuid::nil());
+        let part = PartitionBuilder::new(Uuid::nil())
+            .start(Offset(0))
+            .end(Offset(512))
+            .partition_type(PartitionType::Unused);
+        gpt.add_partition(part.finish(block_size)).unwrap();
+        let e = gpt.add_partition(part.finish(block_size)).unwrap_err();
+        panic!(e.to_string());
+    }
+
+    /// Partitions must be at least one block.
+    #[test]
+    #[should_panic(expected = "Invalid Partition Size")]
+    fn invalid_partitions_size() {
+        let block_size = BlockSize(512);
+        let mut gpt: _Gpt = _Gpt::new(Uuid::nil());
+        let part = PartitionBuilder::new(Uuid::nil())
+            .start(Offset(0))
+            .end(Offset(0))
+            .partition_type(PartitionType::Unused);
+        gpt.add_partition(part.finish(block_size)).unwrap();
+    }
+}
+
+#[cfg(all(test, feature = "std"))]
 mod test_new {
     use super::*;
 
@@ -408,438 +567,11 @@ mod test_new {
     fn feature() {
         let gpt: _Gpt = _Gpt::new(Uuid::new_v4());
         dbg!(gpt);
-        panic!();
+        // panic!();
     }
 }
 
-/// Represents a GUID Partition Table
-///
-/// Note that all modifications are done in-memory
-/// and *only* effect partition entries, not the data in them.
-///
-/// # Memory
-///
-/// By default this takes `16KiB + 24 bytes` of space.
-/// The UEFI spec requires a minimum of 16KiB reserved for partitions,
-/// which is 128 partitions if each entry is 128 bytes,
-/// which we assume by default.
-///
-/// If you are particularly space-constrained, or need to support more,
-/// you can use [`crate::typenum`] to set the `N` generic parameter to
-/// the number of partitions you want to support.
-///
-/// When doing this unsupported partitions will ***not*** be preserved,
-/// and depending on `N`, and what you do, may be overwritten by
-/// newly added partitions.
-///
-/// Regardless of `N`, when reading the full partition array *is* still
-/// validated.
-///
-/// **Warning:** Using values of `N` less than `128` may cause the Gpt
-/// to be considered invalid by other tools or hardware.
-// TODO: No writing for any N?
-#[derive(Copy, Clone, PartialEq)]
-pub struct Gpt<N = U128>
-where
-    N: ArrayLength<Partition> + Unsigned,
-    N::ArrayType: Copy,
-{
-    uuid: Uuid,
-    partitions: GenericArray<Partition, N>,
-    /// Real size of the partitions array.
-    /// u64, not u32, for alignment reasons.
-    partitions_len: u64,
-}
-
-impl Gpt {
-    /// Read the GPT from a byte slice
-    ///
-    /// See [`Gpt::from_bytes_with_size`] if getting a slice of
-    /// the entire disk isn't possible.
-    pub fn from_bytes(source: &[u8], block_size: BlockSize, disk_size: Size) -> Result<Self> {
-        let b_size = block_size.0 as usize;
-        let d_size = disk_size.as_bytes() as usize;
-        let primary = &source[..b_size * 2];
-        let alt = &source[d_size - b_size..];
-        Gpt::from_bytes_with_size(
-            primary,
-            alt,
-            |i, buf| {
-                let i = i.0 as usize;
-                let size = buf.len();
-                buf.copy_from_slice(&source[i..][..size]);
-                Ok(())
-            },
-            block_size,
-            disk_size,
-        )
-    }
-
-    /// Write the full GPT to a byte slice
-    ///
-    /// See [`Gpt::to_bytes_with_size`] if getting a slice of
-    /// the entire disk isn't possible,
-    /// and for details of what gets written and in what order.
-    pub fn to_bytes(&self, dest: &mut [u8], block_size: BlockSize, disk_size: Size) -> Result<()> {
-        self.to_bytes_with_size(
-            |i, buf| {
-                let i = i.0 as usize;
-                dest[i..][..buf.len()].copy_from_slice(buf);
-                Ok(())
-            },
-            block_size,
-            disk_size,
-        )
-    }
-}
-
-#[cfg(feature = "std")]
-impl Gpt {
-    /// Read the GPT from a [`Read`]er.
-    ///
-    /// See [`Gpt::from_bytes`] for more details.
-    pub fn from_reader<RS: Read + Seek>(
-        source: RS,
-        block_size: BlockSize,
-        disk_size: Size,
-    ) -> Result<Self> {
-        Gpt::from_reader_with_size(source, block_size, disk_size)
-    }
-
-    /// Write the GPT to a [`Write`]r.
-    ///
-    /// See [`Gpt::to_bytes`] for more details.
-    pub fn to_writer<WS: Write + Seek>(
-        &self,
-        dest: WS,
-        block_size: BlockSize,
-        disk_size: Size,
-    ) -> Result<()> {
-        self.to_writer_with_size(dest, block_size, disk_size)
-    }
-}
-
-impl<N> Gpt<N>
-where
-    N: ArrayLength<Partition> + Unsigned,
-    N::ArrayType: Copy,
-{
-    /// Like [`Gpt::from_bytes`] but stores `N` partitions
-    /// instead of the minimum reserved amount.
-    ///
-    /// You probably don't want this method, but it can be useful
-    /// if you're fine with only supporting a few partitions.
-    ///
-    /// `primary` must contain LBA0 and LBA1. That is, `block_size * 2` bytes.
-    ///
-    /// `alt` must be the last LBA. That is, `block_size` bytes.
-    ///
-    /// `func` is called to read data. Errors are propagated.
-    /// It's arguments are a byte offset and a buffer to read into.
-    pub fn from_bytes_with_size<F: FnMut(Offset, &mut [u8]) -> Result<()>>(
-        primary: &[u8],
-        alt: &[u8],
-        mut func: F,
-        block_size: BlockSize,
-        disk_size: Size,
-    ) -> Result<Self> {
-        let b_size = block_size.0 as usize;
-        assert_eq!(primary.len(), b_size * 2, "Invalid primary");
-        assert_eq!(alt.len(), b_size, "Invalid alt");
-        let _mbr = ProtectiveMbr::from_bytes(&primary[..MBR_SIZE])
-            .map_err(|_| Error::Invalid("Invalid Protective MBR"))?;
-        let primary = Header::from_bytes(&primary[MBR_SIZE..], block_size)?;
-        let alt = Header::from_bytes(alt, block_size)?;
-        //
-        let mut partitions = default_partitions();
-        validate(
-            &primary,
-            &alt,
-            &mut func,
-            block_size,
-            disk_size,
-            |i, source| {
-                if i < partitions.len() {
-                    partitions[i] = Partition::from_bytes(source, block_size);
-                }
-            },
-        )?;
-
-        Ok(Gpt {
-            uuid: primary.uuid,
-            // Only count used partitions.
-            partitions_len: partitions
-                .iter()
-                .filter(|p| **p != Partition::new())
-                .count() as u64,
-            partitions,
-        })
-    }
-
-    /// Like [`Gpt::to_bytes`] but stores `N` partitions.
-    ///
-    /// `disk_size` must be the size of the device.
-    ///
-    /// `func` will be called to write data.
-    ///
-    /// As an argument it receives the byte offset to write at, and
-    /// a buffer of data to write.
-    ///
-    /// It returns a `Result<()>`, and errors are propagated.
-    ///
-    /// # Errors
-    ///
-    /// If all partitions do not fit within the usable blocks
-    ///
-    /// # Details
-    ///
-    /// This will tell `func` to write, in order:
-    ///
-    /// - The Protective MBR
-    /// - The backup header
-    /// - The backup header array
-    /// - The primary header
-    /// - The primary header array
-    pub fn to_bytes_with_size<F: FnMut(Offset, &[u8]) -> Result<()>>(
-        &self,
-        mut func: F,
-        block_size: BlockSize,
-        disk_size: Size,
-    ) -> Result<()> {
-        let last_lba = (disk_size / block_size) - 1;
-        let mbr = ProtectiveMbr::new(last_lba);
-        let mut mbr_buf = [0; MBR_SIZE];
-        mbr.to_bytes(&mut mbr_buf);
-        func(Size::from_bytes(0).into(), &mbr_buf)?;
-        //
-        let mut partition_buf = [0; PARTITION_ENTRY_SIZE as usize];
-        let mut digest = crc32::Digest::new(crc32::IEEE);
-        // FIXME: Invalid for N lower than 128?
-        for part in self.partitions {
-            part.to_bytes(&mut partition_buf, block_size);
-            digest.write(&partition_buf);
-        }
-        let parts_crc = digest.sum32();
-        let disk_uuid = self.uuid;
-
-        let alt = Header::new(
-            last_lba,
-            Block::new(1, block_size),
-            self.partitions.len() as u32,
-            parts_crc,
-            disk_uuid,
-            block_size,
-            disk_size,
-        );
-        // Verify all partitions are within bounds
-        for part in self.partitions() {
-            let a = part.start() / block_size;
-            let b = part.end() / block_size;
-            if (a < alt.first_usable) || (b > alt.last_usable) {
-                return Err(Error::NotEnough);
-            }
-        }
-        //
-        self.write_header_array(&mut func, alt, last_lba, block_size)?;
-        //
-        let primary = Header::new(
-            Block::new(1, block_size),
-            last_lba,
-            self.partitions.len() as u32,
-            parts_crc,
-            disk_uuid,
-            block_size,
-            disk_size,
-        );
-        self.write_header_array(func, primary, Block::new(1, block_size), block_size)?;
-        Ok(())
-    }
-}
-
-#[cfg(feature = "std")]
-impl<N> Gpt<N>
-where
-    N: ArrayLength<Partition> + Unsigned,
-    N::ArrayType: Copy,
-{
-    /// Create a new GPT Table with no partitions
-    ///
-    /// This requires the `std` feature to generate a unique Uuid.
-    ///
-    /// See [`Gpt::with_uuid`] for a `no_std` solution.
-    // Gpt can't be `Default`, this is std only.
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-        Gpt {
-            uuid: Uuid::new_v4(),
-            partitions: default_partitions(),
-            partitions_len: 0,
-        }
-    }
-
-    /// Like [`Gpt::from_bytes_with_size`] but for readers
-    pub fn from_reader_with_size<RS: Read + Seek>(
-        mut source: RS,
-        block_size: BlockSize,
-        disk_size: Size,
-    ) -> Result<Self> {
-        let last_lba = (disk_size / block_size) - 1;
-        let mut primary = vec![0; (block_size.0 * 2) as usize];
-        let mut alt = vec![0; block_size.0 as usize];
-        source.seek(SeekFrom::Start(0))?;
-        source.read_exact(&mut primary)?;
-        source.seek(SeekFrom::Start(last_lba.into_offset().0))?;
-        source.read_exact(&mut alt)?;
-        let gpt = Gpt::from_bytes_with_size(
-            &primary,
-            &alt,
-            |i, buf| {
-                source.seek(SeekFrom::Start(i.0))?;
-                source.read_exact(buf)?;
-                Ok(())
-            },
-            block_size,
-            disk_size,
-        )?;
-        Ok(gpt)
-    }
-
-    /// Like [`Gpt::to_bytes_with_size`] but for writers
-    pub fn to_writer_with_size<WS: Write + Seek>(
-        &self,
-        mut dest: WS,
-        block_size: BlockSize,
-        disk_size: Size,
-    ) -> Result<()> {
-        self.to_bytes_with_size(
-            |i, buf| {
-                dest.seek(SeekFrom::Start(i.0))?;
-                dest.write_all(buf)?;
-                Ok(())
-            },
-            block_size,
-            disk_size,
-        )?;
-        Ok(())
-    }
-}
-
-// Public APIs
-impl<N> Gpt<N>
-where
-    N: ArrayLength<Partition> + Unsigned,
-    N::ArrayType: Copy,
-{
-    /// Create a new GPT Table
-    ///
-    /// See [`Gpt::new`] for details.
-    // TODO: Take random data instead?
-    // Don't want people using a duplicate Uuid from Gpt::uuid?
-    // Plus need to create Uuid's for partitions? Problem for the Builder?
-    pub fn with_uuid(uuid: Uuid) -> Self {
-        Gpt {
-            uuid,
-            partitions: default_partitions(),
-            partitions_len: 0,
-        }
-    }
-
-    /// Disk UUID
-    pub fn uuid(&self) -> Uuid {
-        self.uuid
-    }
-
-    /// Slice of in-use partitions
-    pub fn partitions(&self) -> &[Partition] {
-        let len = core::cmp::min(self.partitions_len as usize, self.partitions.len());
-        &self.partitions[..len]
-    }
-
-    /// Mutable slice of in-use partitions.
-    pub fn partitions_mut(&mut self) -> &mut [Partition] {
-        let len = core::cmp::min(self.partitions_len as usize, self.partitions.len());
-        &mut self.partitions[..len]
-    }
-
-    /// Add a partition
-    pub fn add_partition(&mut self, part: Partition) -> Result<()> {
-        self.check_overlap(&part)?;
-        let len = core::cmp::min(self.partitions_len as usize, self.partitions.len());
-        self.partitions[len] = part;
-        self.partitions_len += 1;
-        self.partitions_mut().sort_unstable_by_key(|p| p.start());
-        Ok(())
-    }
-
-    /// Remove the partition at `index`.
-    // FIXME: Where is the index supposed to come from, exactly?
-    pub fn remove_partition(&mut self, index: usize) {
-        self.partitions_mut()[index] = Partition::new();
-        self.partitions_len -= 1;
-        self.partitions_mut().sort_unstable_by_key(|p| p.start());
-    }
-
-    /// Set the disk UUID.
-    ///
-    /// Be careful with this, as UUID's MUST be unique.
-    pub fn set_uuid(&mut self, uuid: Uuid) {
-        self.uuid = uuid;
-    }
-
-    // TODO: First/last usable block getters, and remaining. Store disk/block size?
-}
-
-// Private APIs
-impl<N> Gpt<N>
-where
-    N: ArrayLength<Partition> + Unsigned,
-    N::ArrayType: Copy,
-{
-    fn check_overlap(&mut self, part: &Partition) -> Result<()> {
-        for existing in self.partitions() {
-            if part.start() >= existing.start() && part.start() <= existing.end() {
-                return Err(Error::Overlap);
-            }
-        }
-        Ok(())
-    }
-
-    fn write_header_array<F: FnMut(Offset, &[u8]) -> Result<()>>(
-        &self,
-        mut func: F,
-        header: Header,
-        last_lba: Block,
-        block_size: BlockSize,
-    ) -> Result<()> {
-        let mut header_buf = [0; HEADER_SIZE as usize];
-        let mut partition_buf = [0; PARTITION_ENTRY_SIZE as usize];
-        //
-        header.to_bytes(&mut header_buf);
-        func(last_lba.into_offset(), &header_buf)?;
-        for (i, part) in self.partitions.iter().enumerate() {
-            part.to_bytes(&mut partition_buf, block_size);
-            let b =
-                Offset(header.array.into_offset().0 + ((PARTITION_ENTRY_SIZE as u64) * i as u64));
-            func(b, &partition_buf)?;
-        }
-        //
-        Ok(())
-    }
-}
-
-impl<N> fmt::Debug for Gpt<N>
-where
-    N: ArrayLength<Partition> + Unsigned,
-    N::ArrayType: Copy,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Gpt")
-            .field("uuid", &self.uuid)
-            .field("partitions", &self.partitions())
-            .finish()
-    }
-}
-
+#[cfg(any())]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -941,13 +673,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic = "Invalid Protective MBR"]
-    fn missing_mbr_test() {
-        let raw = [0; 1024];
-        let _gpt = read_gpt_size::<U128>(&raw).unwrap();
-    }
-
-    #[test]
     #[should_panic = "Invalid Signature"]
     fn missing_gpt_test() {
         let mut raw = data().unwrap();
@@ -1028,17 +753,6 @@ mod tests {
         // Just test that it doesn't panic
         let _ = gpt.add_partition(part);
         Ok(())
-    }
-
-    /// Prevent adding overlapping partitions
-    #[test]
-    #[should_panic(expected = "Attempted to add overlapping partitions")]
-    fn invalid_partitions() {
-        let raw = data().unwrap();
-        let mut gpt = read_gpt_size::<U128>(&raw).unwrap();
-        let part = gpt.partitions()[0];
-        let e = gpt.add_partition(part).unwrap_err();
-        panic!(e.to_string());
     }
 
     /// Prevent adding invalid partitions, outside the usable lba range.
