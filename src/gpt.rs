@@ -7,6 +7,8 @@ use crate::{
 use arrayvec::{Array, ArrayVec};
 use core::{convert::TryInto, mem};
 use crc::{crc32, Hasher32};
+#[cfg(feature = "serde")]
+use serde_crate::{Deserialize, Serialize};
 #[cfg(feature = "std")]
 use std::io::{prelude::*, SeekFrom};
 use uuid::Uuid;
@@ -167,6 +169,11 @@ impl GptHelper<Vec<Partition>> for Vec<Partition> {
 /// let gpt: GptC<ArrayVec<[Partition; 4]>> = GptC::new(Uuid::new_v4());
 /// ```
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(crate = "serde_crate")
+)]
 pub struct GptC<C> {
     uuid: Uuid,
     partitions: C,

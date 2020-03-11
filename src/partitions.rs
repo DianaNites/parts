@@ -1,5 +1,7 @@
 //! Known partition types
 use derive_more::Display;
+#[cfg(feature = "serde")]
+use serde_crate::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Recognized GPT Partition Types
@@ -8,6 +10,11 @@ use uuid::Uuid;
 /// is not guaranteed to continue to do so, as more partition types
 /// become recognized.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Display)]
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(crate = "serde_crate")
+)]
 #[non_exhaustive]
 pub enum PartitionType {
     /// Unused entry

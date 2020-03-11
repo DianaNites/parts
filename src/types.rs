@@ -1,6 +1,8 @@
 //! Types for use in [`crate::Gpt`]
 use core::ops;
 use derive_more::*;
+#[cfg(feature = "serde")]
+use serde_crate::{Deserialize, Serialize};
 
 /// Helper to define ByteSize from_* setters.
 macro_rules! __ByteSizeImplFrom {
@@ -45,11 +47,21 @@ macro_rules! __ByteSizeImplAs {
 ///
 /// This is usually either `512` or `4096`, but can be any value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, From, Into, Display)]
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(crate = "serde_crate", transparent)
+)]
 #[repr(transparent)]
 pub struct BlockSize(pub u64);
 
 /// Represents a byte offset
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default, Display, Into, From)]
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(crate = "serde_crate", transparent)
+)]
 #[repr(transparent)]
 pub struct Offset(pub u64);
 
@@ -93,6 +105,11 @@ impl From<Size> for Offset {
     RemAssign,
 )]
 #[display(fmt = "{} Bytes", _0)]
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(crate = "serde_crate", transparent)
+)]
 #[repr(transparent)]
 pub struct Size(u64);
 
@@ -166,6 +183,11 @@ impl ops::Div<BlockSize> for Size {
 
 /// Represents a Logical Block Address
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Display)]
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(crate = "serde_crate")
+)]
 #[display(fmt = "Block {}", block)]
 pub struct Block {
     block: u64,
