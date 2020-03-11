@@ -83,22 +83,22 @@ struct RawHeader {
     _reserved: u32,
 
     /// The logical block address we reside in
-    this_lba: LogicalBlockAddress,
+    this_lba: u64,
 
     /// The logical block address the backup header is in
-    alt_lba: LogicalBlockAddress,
+    alt_lba: u64,
 
     /// Where partitions can start
-    first_usable_lba: LogicalBlockAddress,
+    first_usable_lba: u64,
 
     /// Where partitions must end
-    last_usable_lba: LogicalBlockAddress,
+    last_usable_lba: u64,
 
     /// Disk GUID. See [`uuid_hack`] for details.
     disk_guid: [u8; 16],
 
     /// Where our partition array starts on disk.
-    partition_array_start: LogicalBlockAddress,
+    partition_array_start: u64,
 
     /// Number of partitions
     partitions: u32,
@@ -137,16 +137,16 @@ impl Default for RawHeader {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Header {
     /// The logical block address this header is in
-    pub this: LogicalBlockAddress,
+    pub this: Block,
 
     /// The logical block address the backup header is in
-    pub alt: LogicalBlockAddress,
+    pub alt: Block,
 
     /// First valid LBA for partitions
-    pub first_usable: LogicalBlockAddress,
+    pub first_usable: Block,
 
     /// Last valid LBA for partitions
-    pub last_usable: LogicalBlockAddress,
+    pub last_usable: Block,
 
     /// Disk GUID
     pub uuid: Uuid,
@@ -155,7 +155,7 @@ pub struct Header {
     pub partitions: u32,
 
     /// Where the partition array starts on disk.
-    pub array: LogicalBlockAddress,
+    pub array: Block,
 
     /// CRC32 of the partition array
     pub partitions_crc32: u32,
@@ -173,30 +173,30 @@ impl Header {
     /// `partitions_crc32` MUST be calculated over this range,
     /// even if all zeros
     pub fn new(
-        this: LogicalBlockAddress,
-        alt: LogicalBlockAddress,
+        this: Block,
+        alt: Block,
         partitions: u32,
         partitions_crc32: u32,
         disk_uuid: Uuid,
         block_size: BlockSize,
-        disk_size: ByteSize,
+        disk_size: Size,
     ) -> Self {
-        let array_size = LogicalBlockAddress(MIN_PARTITIONS_BYTES / block_size.0);
+        let array_end = Offset(MIN_PARTITIONS_BYTES) / block_size;
         let last = (disk_size / block_size) - 1;
         Self {
             this,
             alt,
             // Partition array, plus the MBR and GPT header
-            first_usable: array_size + 2,
+            first_usable: array_end + 2,
             // Partition array, minus GPT header
-            last_usable: last - array_size - 1,
+            last_usable: last - (array_end - 1).into(),
             uuid: disk_uuid,
             partitions,
             //
-            array: if this.0 == 1 {
-                LogicalBlockAddress(2)
+            array: if this == Block::new(1, block_size) {
+                Block::new(2, block_size)
             } else {
-                last - array_size
+                last - (array_end.into())
             },
             partitions_crc32,
             partition_size: PARTITION_ENTRY_SIZE,
@@ -214,8 +214,8 @@ impl Header {
     /// # Panics
     ///
     /// - If `source` is not `block_size` bytes
-    pub fn from_bytes(source: &[u8], block_size: BlockSize) -> Result<Self> {
-        let block_size = block_size.0 as usize;
+    pub fn from_bytes(source: &[u8], real_block_size: BlockSize) -> Result<Self> {
+        let block_size = real_block_size.0 as usize;
         assert_eq!(source.len(), block_size, "Invalid source");
         // # Safety
         // - `source` is always a valid pointer
@@ -233,13 +233,13 @@ impl Header {
             return Err(Error::Invalid("CRC mismatch"));
         }
         let header = Header {
-            this: raw.this_lba,
-            alt: raw.alt_lba,
-            first_usable: raw.first_usable_lba,
-            last_usable: raw.last_usable_lba,
+            this: Block::new(raw.this_lba, real_block_size),
+            alt: Block::new(raw.alt_lba, real_block_size),
+            first_usable: Block::new(raw.first_usable_lba, real_block_size),
+            last_usable: Block::new(raw.last_usable_lba, real_block_size),
             uuid: uuid_hack(raw.disk_guid),
             partitions: raw.partitions,
-            array: raw.partition_array_start,
+            array: Block::new(raw.partition_array_start, real_block_size),
             partitions_crc32: raw.partitions_crc32,
             partition_size: raw.partition_size,
         };
@@ -254,12 +254,12 @@ impl Header {
     pub fn to_bytes(&self, dest: &mut [u8]) {
         assert_eq!(dest.len(), HEADER_SIZE as usize, "Invalid dest");
         let mut raw = RawHeader::default();
-        raw.this_lba = self.this;
-        raw.alt_lba = self.alt;
-        raw.first_usable_lba = self.first_usable;
-        raw.last_usable_lba = self.last_usable;
+        raw.this_lba = self.this.into();
+        raw.alt_lba = self.alt.into();
+        raw.first_usable_lba = self.first_usable.into();
+        raw.last_usable_lba = self.last_usable.into();
         raw.disk_guid = *uuid_hack(*self.uuid.as_bytes()).as_bytes();
-        raw.partition_array_start = self.array;
+        raw.partition_array_start = self.array.into();
         raw.partitions = self.partitions;
         // No need to calculate or be passed it, should be set when `self` is created.
         raw.partitions_crc32 = self.partitions_crc32;

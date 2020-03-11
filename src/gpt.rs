@@ -22,22 +22,21 @@ pub mod error;
 mod header;
 pub mod partition;
 
-fn validate<F: FnMut(ByteSize, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])>(
+fn validate<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])>(
     primary: &Header,
     alt: &Header,
     mut func: F,
     block_size: BlockSize,
-    disk_size: ByteSize,
+    disk_size: Size,
     mut cb: CB,
 ) -> Result<()> {
-    if primary.this != LogicalBlockAddress(1) {
+    if primary.this != Block::new(1, block_size) {
         return Err(Error::Invalid("Corrupt Primary GPT Header"));
     }
     let crc = calculate_part_crc(
         &mut func,
         primary.partitions as u64,
-        block_size,
-        primary.array,
+        primary.array.into_offset(),
         &mut cb,
     )?;
     if crc != primary.partitions_crc32 {
@@ -51,14 +50,13 @@ fn validate<F: FnMut(ByteSize, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])
     if alt.this != last_lba {
         return Err(Error::Invalid("Corrupt Backup GPT Header"));
     }
-    if alt.alt != LogicalBlockAddress(1) {
+    if alt.alt != Block::new(1, block_size) {
         return Err(Error::Invalid("Corrupt Backup GPT Header"));
     }
     let crc = calculate_part_crc(
         &mut func,
         alt.partitions as u64,
-        block_size,
-        alt.array,
+        alt.array.into_offset(),
         &mut cb,
     )?;
     if crc != alt.partitions_crc32 {
@@ -112,7 +110,7 @@ impl Gpt {
     ///
     /// See [`Gpt::from_bytes_with_size`] if getting a slice of
     /// the entire disk isn't possible.
-    pub fn from_bytes(source: &[u8], block_size: BlockSize, disk_size: ByteSize) -> Result<Self> {
+    pub fn from_bytes(source: &[u8], block_size: BlockSize, disk_size: Size) -> Result<Self> {
         let b_size = block_size.0 as usize;
         let d_size = disk_size.as_bytes() as usize;
         let primary = &source[..b_size * 2];
@@ -121,7 +119,7 @@ impl Gpt {
             primary,
             alt,
             |i, buf| {
-                let i = i.as_bytes() as usize;
+                let i = i.0 as usize;
                 let size = buf.len();
                 buf.copy_from_slice(&source[i..][..size]);
                 Ok(())
@@ -136,15 +134,10 @@ impl Gpt {
     /// See [`Gpt::to_bytes_with_size`] if getting a slice of
     /// the entire disk isn't possible,
     /// and for details of what gets written and in what order.
-    pub fn to_bytes(
-        &self,
-        dest: &mut [u8],
-        block_size: BlockSize,
-        disk_size: ByteSize,
-    ) -> Result<()> {
+    pub fn to_bytes(&self, dest: &mut [u8], block_size: BlockSize, disk_size: Size) -> Result<()> {
         self.to_bytes_with_size(
             |i, buf| {
-                let i = i.as_bytes() as usize;
+                let i = i.0 as usize;
                 dest[i..][..buf.len()].copy_from_slice(buf);
                 Ok(())
             },
@@ -162,7 +155,7 @@ impl Gpt {
     pub fn from_reader<RS: Read + Seek>(
         source: RS,
         block_size: BlockSize,
-        disk_size: ByteSize,
+        disk_size: Size,
     ) -> Result<Self> {
         Gpt::from_reader_with_size(source, block_size, disk_size)
     }
@@ -174,7 +167,7 @@ impl Gpt {
         &self,
         dest: WS,
         block_size: BlockSize,
-        disk_size: ByteSize,
+        disk_size: Size,
     ) -> Result<()> {
         self.to_writer_with_size(dest, block_size, disk_size)
     }
@@ -197,12 +190,12 @@ where
     ///
     /// `func` is called to read data. Errors are propagated.
     /// It's arguments are a byte offset and a buffer to read into.
-    pub fn from_bytes_with_size<F: FnMut(ByteSize, &mut [u8]) -> Result<()>>(
+    pub fn from_bytes_with_size<F: FnMut(Offset, &mut [u8]) -> Result<()>>(
         primary: &[u8],
         alt: &[u8],
         mut func: F,
         block_size: BlockSize,
-        disk_size: ByteSize,
+        disk_size: Size,
     ) -> Result<Self> {
         let b_size = block_size.0 as usize;
         assert_eq!(primary.len(), b_size * 2, "Invalid primary");
@@ -261,17 +254,17 @@ where
     /// - The backup header array
     /// - The primary header
     /// - The primary header array
-    pub fn to_bytes_with_size<F: FnMut(ByteSize, &[u8]) -> Result<()>>(
+    pub fn to_bytes_with_size<F: FnMut(Offset, &[u8]) -> Result<()>>(
         &self,
         mut func: F,
         block_size: BlockSize,
-        disk_size: ByteSize,
+        disk_size: Size,
     ) -> Result<()> {
         let last_lba = (disk_size / block_size) - 1;
-        let mbr = ProtectiveMbr::new(Block::new(last_lba.0, block_size));
+        let mbr = ProtectiveMbr::new(last_lba);
         let mut mbr_buf = [0; MBR_SIZE];
         mbr.to_bytes(&mut mbr_buf);
-        func(ByteSize::from_bytes(0), &mbr_buf)?;
+        func(Size::from_bytes(0).into(), &mbr_buf)?;
         //
         let mut partition_buf = [0; PARTITION_ENTRY_SIZE as usize];
         let mut digest = crc32::Digest::new(crc32::IEEE);
@@ -284,7 +277,7 @@ where
 
         let alt = Header::new(
             last_lba,
-            LogicalBlockAddress(1),
+            Block::new(1, block_size),
             self.partitions.len() as u32,
             parts_crc,
             disk_uuid,
@@ -293,8 +286,8 @@ where
         );
         // Verify all partitions are within bounds
         for part in self.partitions() {
-            let a = LogicalBlockAddress((part.start() / block_size).into());
-            let b = LogicalBlockAddress((part.end() / block_size).into());
+            let a = part.start() / block_size;
+            let b = part.end() / block_size;
             if (a < alt.first_usable) || (b > alt.last_usable) {
                 return Err(Error::NotEnough);
             }
@@ -303,7 +296,7 @@ where
         self.write_header_array(&mut func, alt, last_lba, block_size)?;
         //
         let primary = Header::new(
-            LogicalBlockAddress(1),
+            Block::new(1, block_size),
             last_lba,
             self.partitions.len() as u32,
             parts_crc,
@@ -311,7 +304,7 @@ where
             block_size,
             disk_size,
         );
-        self.write_header_array(func, primary, LogicalBlockAddress(1), block_size)?;
+        self.write_header_array(func, primary, Block::new(1, block_size), block_size)?;
         Ok(())
     }
 }
@@ -341,20 +334,20 @@ where
     pub fn from_reader_with_size<RS: Read + Seek>(
         mut source: RS,
         block_size: BlockSize,
-        disk_size: ByteSize,
+        disk_size: Size,
     ) -> Result<Self> {
         let last_lba = (disk_size / block_size) - 1;
         let mut primary = vec![0; (block_size.0 * 2) as usize];
         let mut alt = vec![0; block_size.0 as usize];
         source.seek(SeekFrom::Start(0))?;
         source.read_exact(&mut primary)?;
-        source.seek(SeekFrom::Start((last_lba * block_size).as_bytes()))?;
+        source.seek(SeekFrom::Start(last_lba.into_offset().0))?;
         source.read_exact(&mut alt)?;
         let gpt = Gpt::from_bytes_with_size(
             &primary,
             &alt,
             |i, buf| {
-                source.seek(SeekFrom::Start(i.as_bytes()))?;
+                source.seek(SeekFrom::Start(i.0))?;
                 source.read_exact(buf)?;
                 Ok(())
             },
@@ -369,11 +362,11 @@ where
         &self,
         mut dest: WS,
         block_size: BlockSize,
-        disk_size: ByteSize,
+        disk_size: Size,
     ) -> Result<()> {
         self.to_bytes_with_size(
             |i, buf| {
-                dest.seek(SeekFrom::Start(i.as_bytes()))?;
+                dest.seek(SeekFrom::Start(i.0))?;
                 dest.write_all(buf)?;
                 Ok(())
             },
@@ -463,22 +456,22 @@ where
         Ok(())
     }
 
-    fn write_header_array<F: FnMut(ByteSize, &[u8]) -> Result<()>>(
+    fn write_header_array<F: FnMut(Offset, &[u8]) -> Result<()>>(
         &self,
         mut func: F,
         header: Header,
-        last_lba: LogicalBlockAddress,
+        last_lba: Block,
         block_size: BlockSize,
     ) -> Result<()> {
         let mut header_buf = [0; HEADER_SIZE as usize];
         let mut partition_buf = [0; PARTITION_ENTRY_SIZE as usize];
         //
         header.to_bytes(&mut header_buf);
-        func(last_lba * block_size, &header_buf)?;
+        func(last_lba.into_offset(), &header_buf)?;
         for (i, part) in self.partitions.iter().enumerate() {
             part.to_bytes(&mut partition_buf, block_size);
-            let b = header.array * block_size;
-            let b = b + (ByteSize::from_bytes(PARTITION_ENTRY_SIZE as u64) * i as u64);
+            let b =
+                Offset(header.array.into_offset().0 + ((PARTITION_ENTRY_SIZE as u64) * i as u64));
             func(b, &partition_buf)?;
         }
         //
@@ -534,13 +527,13 @@ mod tests {
             &primary,
             &alt,
             |i, buf| {
-                let i = i.as_bytes() as usize;
+                let i = i.0 as usize;
                 let size = buf.len();
                 buf.copy_from_slice(&raw[i..][..size]);
                 Ok(())
             },
             BLOCK_SIZE,
-            ByteSize::from_bytes(TEN_MIB_BYTES as u64),
+            Size::from_bytes(TEN_MIB_BYTES as u64),
         )
         .map_err(anyhow::Error::msg)?;
         //
@@ -565,7 +558,7 @@ mod tests {
         read_gpt_size::<U0>(&raw)?;
         read_gpt_size::<U64>(&raw)?;
         read_gpt_size::<U256>(&raw)?;
-        Gpt::from_bytes(&raw, BLOCK_SIZE, ByteSize::from_bytes(TEN_MIB_BYTES as u64))?;
+        Gpt::from_bytes(&raw, BLOCK_SIZE, Size::from_bytes(TEN_MIB_BYTES as u64))?;
         //
         expected_gpt(gpt);
         //
@@ -579,12 +572,12 @@ mod tests {
         let gpt = read_gpt_size::<U128>(&data()?)?;
         gpt.to_bytes_with_size(
             |i, buf| {
-                let i = i.as_bytes() as usize;
+                let i = i.0 as usize;
                 dest[i..][..buf.len()].copy_from_slice(buf);
                 Ok(())
             },
             BLOCK_SIZE,
-            ByteSize::from_bytes(TEN_MIB_BYTES as u64),
+            Size::from_bytes(TEN_MIB_BYTES as u64),
         )
         .map_err(anyhow::Error::msg)?;
         let new_gpt = read_gpt_size::<U128>(&dest)?;
@@ -593,7 +586,7 @@ mod tests {
         gpt.to_bytes(
             &mut dest,
             BLOCK_SIZE,
-            ByteSize::from_bytes(TEN_MIB_BYTES as u64),
+            Size::from_bytes(TEN_MIB_BYTES as u64),
         )?;
         let new_gpt = read_gpt_size::<U128>(&dest)?;
         assert_eq!(new_gpt, gpt);
@@ -621,7 +614,7 @@ mod tests {
     fn std_gpt_test() -> Result {
         let raw = data()?;
         let raw = std::io::Cursor::new(raw);
-        let gpt = Gpt::from_reader(raw, BLOCK_SIZE, ByteSize::from_bytes(TEN_MIB_BYTES as u64))?;
+        let gpt = Gpt::from_reader(raw, BLOCK_SIZE, Size::from_bytes(TEN_MIB_BYTES as u64))?;
         expected_gpt(gpt);
         //
         Ok(())
@@ -638,13 +631,13 @@ mod tests {
             raw,
             raw,
             |i, buf| {
-                let i = i.as_bytes() as usize;
+                let i = i.0 as usize;
                 let size = buf.len();
                 buf.copy_from_slice(&raw[i..][..size]);
                 Ok(())
             },
             BLOCK_SIZE,
-            ByteSize::from_bytes(TEN_MIB_BYTES as u64),
+            Size::from_bytes(TEN_MIB_BYTES as u64),
         );
         let e = gpt.unwrap_err();
         if let Error::NotEnough = e {
@@ -662,12 +655,12 @@ mod tests {
         zero_gpt
             .to_bytes_with_size(
                 |i, buf| {
-                    let i = i.as_bytes() as usize;
+                    let i = i.0 as usize;
                     raw[i..][..buf.len()].copy_from_slice(buf);
                     Ok(())
                 },
                 BLOCK_SIZE,
-                ByteSize::from_bytes(TEN_MIB_BYTES as u64),
+                Size::from_bytes(TEN_MIB_BYTES as u64),
             )
             .map_err(anyhow::Error::msg)?;
         let gpt = read_gpt_size::<U128>(&raw)?;
@@ -737,7 +730,7 @@ mod tests {
     #[test]
     fn empty_partitions() -> Result {
         let mut data = vec![0; TEN_MIB_BYTES];
-        let size = ByteSize::from_bytes(TEN_MIB_BYTES as u64);
+        let size = Size::from_bytes(TEN_MIB_BYTES as u64);
         let gpt = Gpt::new();
         gpt.to_bytes(&mut data, BLOCK_SIZE, size)?;
         let gpt = Gpt::from_bytes(&data, BLOCK_SIZE, size)?;
@@ -751,7 +744,7 @@ mod tests {
     fn empty_partitions_std() -> Result {
         let data = vec![0; TEN_MIB_BYTES];
         let mut data = io::Cursor::new(data);
-        let size = ByteSize::from_bytes(TEN_MIB_BYTES as u64);
+        let size = Size::from_bytes(TEN_MIB_BYTES as u64);
         let gpt = Gpt::new();
         gpt.to_writer(&mut data, BLOCK_SIZE, size)?;
         let gpt = Gpt::from_reader(&mut data, BLOCK_SIZE, size)?;

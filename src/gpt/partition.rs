@@ -32,18 +32,16 @@ pub const MIN_PARTITIONS_BYTES: u64 = 16384;
 /// PARTITION_ENTRY_SIZE bytes
 ///
 /// `CB` also receives the partition number, starting at zero.
-pub fn calculate_part_crc<F: FnMut(ByteSize, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])>(
+pub fn calculate_part_crc<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])>(
     func: &mut F,
     partitions: u64,
-    block_size: BlockSize,
-    array_start: LogicalBlockAddress,
+    array_start: Offset,
     cb: &mut CB,
 ) -> Result<u32> {
     let mut digest = crc32::Digest::new(crc32::IEEE);
     let mut buf = [0; PARTITION_ENTRY_SIZE as usize];
     for i in 0..partitions {
-        let b = array_start * block_size;
-        let b = b + (ByteSize::from_bytes(PARTITION_ENTRY_SIZE as u64) * i);
+        let b = Offset(array_start.0 + ((PARTITION_ENTRY_SIZE as u64) * i));
         func(b, &mut buf)?;
         cb(i as usize, &buf);
         digest.write(&buf);
