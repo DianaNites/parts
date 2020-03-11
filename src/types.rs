@@ -5,7 +5,7 @@ use derive_more::*;
 /// Helper to define ByteSize from_* setters.
 macro_rules! __ByteSizeImplFrom {
     ($m:expr, $p:ident, $v:expr) => {
-        /// Create a [`ByteSize`] from the specified number of `
+        /// Create a [`Size`] from the specified number of `
         #[doc = $m]
         ///`
         pub fn $p($p: u64) -> Self {
@@ -27,7 +27,7 @@ macro_rules! __ByteSizeImplAs {
     };
     ("Bytes", $p:ident, $v:expr) => {
         __ByteSizeImplAs!(
-            /// Return the number of `Bytes` contained by this [`ByteSize`].
+            /// Return the number of `Bytes` contained by this [`Size`].
             @func $p ,$v
         );
     };
@@ -35,7 +35,7 @@ macro_rules! __ByteSizeImplAs {
         __ByteSizeImplAs!(
             /// Return the number of *whole* `
             #[doc = $m]
-            ///` contained by this [`ByteSize`].
+            ///` contained by this [`Size`].
             @func $p, $v
         );
     };
