@@ -54,8 +54,6 @@ pub use partitions::*;
 // Re-exports
 pub use arrayvec;
 #[doc(inline)]
-pub use generic_array::typenum;
-#[doc(inline)]
 pub use uuid;
 
 #[cfg(all(doctest, feature = "nightly"))]
