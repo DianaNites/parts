@@ -145,13 +145,13 @@ impl GptHelper<Vec<Partition>> for Vec<Partition> {
 /// partitions, this type is generic over the container.
 ///
 /// WARNING: Partitions can be effectively lost this way, during writing.
-/// If there are 5 partitions and you constrain `_Gpt` to support only 4,
+/// If there are 5 partitions and you constrain `GptC` to support only 4,
 /// it's only possible to write the 4 back out,
 /// the 5th will not be included in the partition CRC or array.
 ///
 /// # Examples
 ///
-/// _Gpt supporting only 4 partitions.
+/// `GptC` supporting only 4 partitions.
 ///
 /// ```rust
 /// # use parts::{arrayvec::ArrayVec, GptC, Partition};
