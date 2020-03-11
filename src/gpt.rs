@@ -174,7 +174,7 @@ impl GptHelper<Vec<Partition>> for Vec<Partition> {
 /// # use parts::{arrayvec::ArrayVec, GptC, Partition, uuid::Uuid};
 /// let gpt: GptC<ArrayVec<[Partition; 4]>> = GptC::new(Uuid::new_v4());
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Copy, Debug, Clone, PartialEq)]
 #[cfg_attr(
     feature = "serde",
     derive(Serialize, Deserialize),
