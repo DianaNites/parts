@@ -5,7 +5,7 @@ use crate::{
     types::*,
 };
 use arrayvec::{Array, ArrayVec};
-use core::{fmt, ops};
+use core::{convert::TryInto, fmt};
 use crc::{crc32, Hasher32};
 use generic_array::{
     sequence::GenericSequence,
@@ -145,7 +145,7 @@ type _Gpt<C = ArrayVec<[Partition; 128]>> = _GptC<C>;
 type _Gpt<C = std::vec::Vec<Partition>> = _GptC<C>;
 
 #[allow(dead_code)]
-impl<C: _GptHelper<C>> _GptC<C> {
+impl<C: _GptHelper<C>> _Gpt<C> {
     /// New empty Gpt
     ///
     /// WARNING: `uuid` must be unique, such as from [`Uuid::new_v4`].
@@ -197,11 +197,8 @@ impl<C: _GptHelper<C>> _GptC<C> {
             &mut func,
             block_size,
             disk_size,
-            |_i, _source| {
-                todo!()
-                // if i < partitions.len() {
-                //     partitions[i] = Partition::from_bytes(source,
-                // block_size); }
+            |_, source| {
+                let _ = partitions.push(Partition::from_bytes(source, block_size));
             },
         )?;
 
@@ -209,6 +206,120 @@ impl<C: _GptHelper<C>> _GptC<C> {
             uuid: primary.uuid,
             partitions,
         })
+    }
+
+    #[cfg(feature = "std")]
+    pub fn from_reader<RS: Read + Seek>(
+        mut source: RS,
+        block_size: BlockSize,
+        disk_size: Size,
+    ) -> Result<Self> {
+        let last_lba = (disk_size / block_size) - 1;
+        let mut primary = vec![0; (block_size.0 * 2) as usize];
+        let mut alt = vec![0; block_size.0 as usize];
+        source.seek(SeekFrom::Start(0))?;
+        source.read_exact(&mut primary)?;
+        source.seek(SeekFrom::Start(last_lba.into_offset().0))?;
+        source.read_exact(&mut alt)?;
+        let gpt = _GptC::from_bytes_with_func(
+            &primary,
+            &alt,
+            |i, buf| {
+                source.seek(SeekFrom::Start(i.0))?;
+                source.read_exact(buf)?;
+                Ok(())
+            },
+            block_size,
+            disk_size,
+        )?;
+        Ok(gpt)
+    }
+
+    pub fn to_bytes(&self, dest: &mut [u8], block_size: BlockSize, disk_size: Size) -> Result<()> {
+        self.to_bytes_with_func(
+            |i, buf| {
+                let i = i.0 as usize;
+                dest[i..][..buf.len()].copy_from_slice(buf);
+                Ok(())
+            },
+            block_size,
+            disk_size,
+        )
+    }
+
+    pub fn to_bytes_with_func<F: FnMut(Offset, &[u8]) -> Result<()>>(
+        &self,
+        mut func: F,
+        block_size: BlockSize,
+        disk_size: Size,
+    ) -> Result<()> {
+        let last_lba = (disk_size / block_size) - 1;
+        let mbr = ProtectiveMbr::new(last_lba);
+        let mut mbr_buf = [0; MBR_SIZE];
+        mbr.to_bytes(&mut mbr_buf);
+        func(Size::from_bytes(0).into(), &mbr_buf)?;
+        //
+        let partition_len = self.partitions.as_slice().len().try_into().unwrap();
+        let mut partition_buf = [0; PARTITION_ENTRY_SIZE as usize];
+        let mut digest = crc32::Digest::new(crc32::IEEE);
+        // FIXME: Invalid for N lower than 128?
+        for part in self.partitions.as_slice() {
+            part.to_bytes(&mut partition_buf, block_size);
+            digest.write(&partition_buf);
+        }
+        let parts_crc = digest.sum32();
+        let disk_uuid = self.uuid;
+
+        let alt = Header::new(
+            last_lba,
+            Block::new(1, block_size),
+            partition_len,
+            parts_crc,
+            disk_uuid,
+            block_size,
+            disk_size,
+        );
+        // Verify all partitions are within bounds
+        for part in self.partitions() {
+            let a = part.start() / block_size;
+            let b = part.end() / block_size;
+            if (a < alt.first_usable) || (b > alt.last_usable) {
+                return Err(Error::NotEnough);
+            }
+        }
+        //
+        self.write_header_array(&mut func, alt, last_lba, block_size)?;
+        //
+        let primary = Header::new(
+            Block::new(1, block_size),
+            last_lba,
+            partition_len,
+            parts_crc,
+            disk_uuid,
+            block_size,
+            disk_size,
+        );
+        self.write_header_array(func, primary, Block::new(1, block_size), block_size)?;
+        Ok(())
+    }
+
+    #[cfg(feature = "std")]
+    pub fn to_writer<WS: Write + Seek>(
+        &self,
+        mut dest: WS,
+        block_size: BlockSize,
+        disk_size: Size,
+    ) -> Result<()> {
+        self.to_bytes_with_func(
+            |i, buf| {
+                dest.seek(SeekFrom::Start(i.0))?;
+                dest.write_all(buf)?;
+                Ok(())
+            },
+            block_size,
+            disk_size,
+        )?;
+        Ok(())
     }
 
     /// Unique Disk UUID
@@ -263,6 +374,28 @@ impl<C: _GptHelper<C>> _GptC<C> {
                 return Err(Error::Overlap);
             }
         }
+        Ok(())
+    }
+
+    fn write_header_array<F: FnMut(Offset, &[u8]) -> Result<()>>(
+        &self,
+        mut func: F,
+        header: Header,
+        last_lba: Block,
+        block_size: BlockSize,
+    ) -> Result<()> {
+        let mut header_buf = [0; HEADER_SIZE as usize];
+        let mut partition_buf = [0; PARTITION_ENTRY_SIZE as usize];
+        //
+        header.to_bytes(&mut header_buf);
+        func(last_lba.into_offset(), &header_buf)?;
+        for (i, part) in self.partitions.as_slice().iter().enumerate() {
+            part.to_bytes(&mut partition_buf, block_size);
+            let b =
+                Offset(header.array.into_offset().0 + ((PARTITION_ENTRY_SIZE as u64) * i as u64));
+            func(b, &partition_buf)?;
+        }
+        //
         Ok(())
     }
 }
