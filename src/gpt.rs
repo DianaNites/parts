@@ -164,14 +164,14 @@ struct GptC<C> {
 }
 
 #[cfg(not(feature = "std"))]
-type _Gpt<C = ArrayVec<[Partition; 128]>> = GptC<C>;
+type Gpt<C = ArrayVec<[Partition; 128]>> = GptC<C>;
 
 #[cfg(feature = "std")]
-type _Gpt<C = std::vec::Vec<Partition>> = GptC<C>;
+type Gpt<C = std::vec::Vec<Partition>> = GptC<C>;
 
 // Public APIs
 #[allow(dead_code)]
-impl<C: GptHelper<C>> _Gpt<C> {
+impl<C: GptHelper<C>> Gpt<C> {
     /// New empty Gpt
     ///
     /// WARNING: `uuid` must be unique, such as from [`Uuid::new_v4`].
@@ -222,7 +222,7 @@ impl<C: GptHelper<C>> _Gpt<C> {
     /// `func` receives a byte offset into the device,
     /// and a buffer to read into.
     ///
-    /// See [`_Gpt::from_bytes`] for more details.
+    /// See [`Gpt::from_bytes`] for more details.
     ///
     /// # Errors
     ///
@@ -264,7 +264,7 @@ impl<C: GptHelper<C>> _Gpt<C> {
 
     /// Read the Gpt from `source`
     ///
-    /// See [`_Gpt::from_bytes`] for more details.
+    /// See [`Gpt::from_bytes`] for more details.
     ///
     /// # Errors
     ///
@@ -337,7 +337,7 @@ impl<C: GptHelper<C>> _Gpt<C> {
     /// `func` receives a byte offset into the device,
     /// and a buffer to write to the device.
     ///
-    /// See [`_Gpt::to_bytes`] for more details.
+    /// See [`Gpt::to_bytes`] for more details.
     ///
     /// # Errors
     ///
@@ -402,7 +402,7 @@ impl<C: GptHelper<C>> _Gpt<C> {
 
     /// Write the Gpt to `dest`
     ///
-    /// See [`_Gpt::to_bytes`] for more details.
+    /// See [`Gpt::to_bytes`] for more details.
     ///
     /// # Errors
     ///
@@ -516,11 +516,11 @@ mod test_new_no_std {
     use uuid::Uuid;
 
     #[cfg(feature = "std")]
-    assert_eq_size!(_Gpt, [u8; mem::size_of::<Uuid>() + Vec::<Partition>::SIZE]);
+    assert_eq_size!(Gpt, [u8; mem::size_of::<Uuid>() + Vec::<Partition>::SIZE]);
 
     #[cfg(not(feature = "std"))]
     assert_eq_size!(
-        _Gpt,
+        Gpt,
         [u8; mem::size_of::<Uuid>() + ArrayVec::<[Partition; 128]>::SIZE]
     );
 
@@ -528,7 +528,7 @@ mod test_new_no_std {
     #[should_panic = "Invalid Protective MBR"]
     fn missing_mbr_test() {
         let raw = [0; 1024];
-        let _gpt: _Gpt = _Gpt::from_bytes(&raw, BlockSize(512), Size::from_bytes(1024)).unwrap();
+        let _gpt: Gpt = Gpt::from_bytes(&raw, BlockSize(512), Size::from_bytes(1024)).unwrap();
     }
 
     /// Prevent adding overlapping partitions
@@ -536,7 +536,7 @@ mod test_new_no_std {
     #[should_panic(expected = "Attempted to add overlapping partitions")]
     fn invalid_partitions() {
         let block_size = BlockSize(512);
-        let mut gpt: _Gpt = _Gpt::new(Uuid::nil());
+        let mut gpt: Gpt = Gpt::new(Uuid::nil());
         let part = PartitionBuilder::new(Uuid::nil())
             .start(Offset(0))
             .end(Offset(512))
@@ -551,7 +551,7 @@ mod test_new_no_std {
     #[should_panic(expected = "Invalid Partition Size")]
     fn invalid_partitions_size() {
         let block_size = BlockSize(512);
-        let mut gpt: _Gpt = _Gpt::new(Uuid::nil());
+        let mut gpt: Gpt = Gpt::new(Uuid::nil());
         let part = PartitionBuilder::new(Uuid::nil())
             .start(Offset(0))
             .end(Offset(0))
@@ -566,7 +566,7 @@ mod test_new {
 
     #[test]
     fn feature() {
-        let gpt: _Gpt = _Gpt::new(Uuid::new_v4());
+        let gpt: Gpt = Gpt::new(Uuid::new_v4());
         dbg!(gpt);
         // panic!();
     }
