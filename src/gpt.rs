@@ -13,9 +13,7 @@ use generic_array::{
     GenericArray,
 };
 #[cfg(feature = "std")]
-use std::io::prelude::*;
-#[cfg(feature = "std")]
-use std::io::SeekFrom;
+use std::io::{prelude::*, SeekFrom};
 use uuid::Uuid;
 
 pub mod error;
