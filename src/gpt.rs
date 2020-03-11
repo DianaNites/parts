@@ -274,6 +274,7 @@ where
         //
         let mut partition_buf = [0; PARTITION_ENTRY_SIZE as usize];
         let mut digest = crc32::Digest::new(crc32::IEEE);
+        // FIXME: Invalid for N lower than 128?
         for part in self.partitions {
             part.to_bytes(&mut partition_buf, block_size);
             digest.write(&partition_buf);
