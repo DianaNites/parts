@@ -135,7 +135,8 @@ impl _GptHelper<Vec<Partition>> for Vec<Partition> {
 /// and there is no limit to how many can be read/written.
 ///
 /// But when `no_std`, partitions are stored in an `ArrayVec`,
-/// and will by default use `16KiB + ??? bytes` of space.
+/// and will by default use at least `16KiB`, plus a variable amount depending
+/// on `C`, of space.
 ///
 /// This is because the GPT spec requires a minimum of 16KiB reserved
 /// for the partition array.
