@@ -2,7 +2,6 @@
 use crate::types::*;
 use core::{convert::TryFrom, mem::size_of};
 use displaydoc::Display;
-use generic_array::{typenum::U440, GenericArray};
 #[cfg(any(feature = "std", test))]
 use thiserror::Error;
 
@@ -20,12 +19,28 @@ type Result<T, E = Error> = core::result::Result<T, E>;
 
 pub const MBR_SIZE: usize = 512;
 
+#[derive(Copy, Clone)]
+#[repr(transparent)]
+struct BootCode([u8; 440]);
+
+impl PartialEq for BootCode {
+    fn eq(&self, other: &Self) -> bool {
+        self.0[..] == other.0[..]
+    }
+}
+
+impl Default for BootCode {
+    fn default() -> Self {
+        BootCode([0; 440])
+    }
+}
+
 /// GPT Protective MBR
 #[derive(PartialEq, Copy, Clone)]
 #[repr(C, packed)]
 pub struct ProtectiveMbr {
     /// Bios boot code. Unused by GPT.
-    boot_code: GenericArray<u8, U440>,
+    boot_code: BootCode,
 
     /// A unique signature. Unused by GPT.
     /// Hard-coded to 0.
@@ -49,7 +64,7 @@ impl ProtectiveMbr {
     pub fn new(last_lba: Block) -> Self {
         let last_lba: u64 = last_lba.into();
         Self {
-            boot_code: GenericArray::default(),
+            boot_code: Default::default(),
             unique_signature: [0u8; 4],
             unknown: [0u8; 2],
             partitions: [
