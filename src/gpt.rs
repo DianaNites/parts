@@ -570,9 +570,10 @@ mod test {
         partitions::PartitionType,
         util::{Result, *},
     };
-    use std::{io, mem};
+    use std::{io, mem, vec::Vec as StdVec};
 
     type Array<N> = ArrayVec<N>;
+    type Vec = StdVec<Partition>;
 
     fn read_gpt_size<N>(raw: &[u8]) -> Result<Gpt<N>>
     where
@@ -619,9 +620,32 @@ mod test {
         read_gpt_size::<Array<[Partition; 256]>>(&raw)?;
         let _: Gpt = Gpt::from_bytes(&raw, BLOCK_SIZE, Size::from_bytes(TEN_MIB_BYTES as u64))?;
         //
-        let gpt = read_gpt_size::<Vec<Partition>>(&raw)?;
+        let gpt = read_gpt_size::<Vec>(&raw)?;
         expected_gpt(gpt);
         //
+        Ok(())
+    }
+
+    #[test]
+    fn gpt_roundtrip() -> Result {
+        let mut dest = vec![0; TEN_MIB_BYTES];
+        let gpt = read_gpt_size::<Vec>(&data()?)?;
+        gpt.to_bytes(
+            &mut dest,
+            BLOCK_SIZE,
+            Size::from_bytes(TEN_MIB_BYTES as u64),
+        )
+        .map_err(anyhow::Error::msg)?;
+        let new_gpt = read_gpt_size::<Vec>(&dest)?;
+        assert_eq!(new_gpt, gpt);
+        //
+        gpt.to_bytes(
+            &mut dest,
+            BLOCK_SIZE,
+            Size::from_bytes(TEN_MIB_BYTES as u64),
+        )?;
+        let new_gpt = read_gpt_size::<Vec>(&dest)?;
+        assert_eq!(new_gpt, gpt);
         Ok(())
     }
 }
@@ -641,34 +665,6 @@ mod tests {
     };
     use static_assertions::*;
     use std::io;
-
-    //
-    #[test]
-    fn gpt_roundtrip() -> Result {
-        let mut dest = vec![0; TEN_MIB_BYTES];
-        let gpt = read_gpt_size::<U128>(&data()?)?;
-        gpt.to_bytes_with_size(
-            |i, buf| {
-                let i = i.0 as usize;
-                dest[i..][..buf.len()].copy_from_slice(buf);
-                Ok(())
-            },
-            BLOCK_SIZE,
-            Size::from_bytes(TEN_MIB_BYTES as u64),
-        )
-        .map_err(anyhow::Error::msg)?;
-        let new_gpt = read_gpt_size::<U128>(&dest)?;
-        assert_eq!(new_gpt, gpt);
-        //
-        gpt.to_bytes(
-            &mut dest,
-            BLOCK_SIZE,
-            Size::from_bytes(TEN_MIB_BYTES as u64),
-        )?;
-        let new_gpt = read_gpt_size::<U128>(&dest)?;
-        assert_eq!(new_gpt, gpt);
-        Ok(())
-    }
 
     #[test]
     #[should_panic = "Invalid Signature"]
