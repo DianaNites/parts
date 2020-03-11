@@ -4,7 +4,8 @@ use crate::{
     mbr::{ProtectiveMbr, MBR_SIZE},
     types::*,
 };
-use core::fmt;
+use arrayvec::{Array, ArrayVec};
+use core::{fmt, ops};
 use crc::{crc32, Hasher32};
 use generic_array::{
     sequence::GenericSequence,
@@ -70,6 +71,212 @@ where
     N::ArrayType: Copy,
 {
     GenericArray::<Partition, N>::generate(|_| Partition::new())
+}
+
+trait _GptHelper<C> {
+    fn new() -> C;
+
+    fn as_slice(&self) -> &[Partition];
+
+    fn as_mut_slice(&mut self) -> &mut [Partition];
+
+    fn push(&mut self, part: Partition) -> Result<()>;
+
+    fn remove(&mut self, index: usize) -> Partition;
+}
+
+impl<N: Array<Item = Partition>> _GptHelper<ArrayVec<N>> for ArrayVec<N> {
+    fn new() -> ArrayVec<N> {
+        ArrayVec::new()
+    }
+
+    fn as_slice(&self) -> &[Partition] {
+        self.as_slice()
+    }
+
+    fn as_mut_slice(&mut self) -> &mut [Partition] {
+        self.as_mut_slice()
+    }
+
+    fn push(&mut self, part: Partition) -> Result<()> {
+        self.try_push(part).map_err(|_| Error::Overlap)
+    }
+
+    fn remove(&mut self, index: usize) -> Partition {
+        self.remove(index)
+    }
+}
+
+#[cfg(feature = "std")]
+impl _GptHelper<Vec<Partition>> for Vec<Partition> {
+    fn new() -> Vec<Partition> {
+        // TODO: Const
+        Vec::with_capacity(128)
+    }
+
+    fn as_slice(&self) -> &[Partition] {
+        self.as_slice()
+    }
+
+    fn as_mut_slice(&mut self) -> &mut [Partition] {
+        self.as_mut_slice()
+    }
+
+    fn push(&mut self, part: Partition) -> Result<()> {
+        self.push(part);
+        Ok(())
+    }
+
+    fn remove(&mut self, index: usize) -> Partition {
+        self.remove(index)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+struct _GptC<C> {
+    uuid: Uuid,
+    partitions: C,
+}
+
+#[cfg(not(feature = "std"))]
+type _Gpt<C = ArrayVec<[Partition; 128]>> = _GptC<C>;
+
+#[cfg(feature = "std")]
+type _Gpt<C = std::vec::Vec<Partition>> = _GptC<C>;
+
+#[allow(dead_code)]
+impl<C: _GptHelper<C>> _GptC<C> {
+    /// New empty Gpt
+    ///
+    /// WARNING: `uuid` must be unique, such as from [`Uuid::new_v4`].
+    pub fn new(uuid: Uuid) -> Self {
+        Self {
+            uuid,
+            partitions: C::new(),
+        }
+    }
+
+    pub fn from_bytes(source: &[u8], block_size: BlockSize, disk_size: Size) -> Result<Self> {
+        let b_size = block_size.0 as usize;
+        let d_size = disk_size.as_bytes() as usize;
+        let primary = &source[..b_size * 2];
+        let alt = &source[d_size - b_size..];
+        _GptC::from_bytes_with_func(
+            primary,
+            alt,
+            |i, buf| {
+                let i = i.0 as usize;
+                let size = buf.len();
+                buf.copy_from_slice(&source[i..][..size]);
+                Ok(())
+            },
+            block_size,
+            disk_size,
+        )
+    }
+
+    pub fn from_bytes_with_func<F: FnMut(Offset, &mut [u8]) -> Result<()>>(
+        primary: &[u8],
+        alt: &[u8],
+        mut func: F,
+        block_size: BlockSize,
+        disk_size: Size,
+    ) -> Result<Self> {
+        let b_size = block_size.0 as usize;
+        assert_eq!(primary.len(), b_size * 2, "Invalid primary");
+        assert_eq!(alt.len(), b_size, "Invalid alt");
+        let _mbr = ProtectiveMbr::from_bytes(&primary[..MBR_SIZE])
+            .map_err(|_| Error::Invalid("Invalid Protective MBR"))?;
+        let primary = Header::from_bytes(&primary[MBR_SIZE..], block_size)?;
+        let alt = Header::from_bytes(alt, block_size)?;
+        //
+        let mut partitions = C::new();
+        validate(
+            &primary,
+            &alt,
+            &mut func,
+            block_size,
+            disk_size,
+            |_i, _source| {
+                todo!()
+                // if i < partitions.len() {
+                //     partitions[i] = Partition::from_bytes(source,
+                // block_size); }
+            },
+        )?;
+
+        Ok(_GptC {
+            uuid: primary.uuid,
+            partitions,
+        })
+    }
+
+    /// Unique Disk UUID
+    pub fn uuid(&self) -> Uuid {
+        self.uuid
+    }
+
+    /// Slice of in-use partitions
+    pub fn partitions(&self) -> &[Partition] {
+        self.partitions.as_slice()
+    }
+
+    /// Mutable slice of in-use partitions.
+    pub fn partitions_mut(&mut self) -> &mut [Partition] {
+        self.partitions.as_mut_slice()
+    }
+
+    /// Add a partition.
+    ///
+    /// # Errors
+    ///
+    /// - If `part` overlaps with existing partitions
+    /// - In `no_std`, if `part` would overflow `C`.
+    pub fn add_partition(&mut self, part: Partition) -> Result<()> {
+        self.check_overlap(&part)?;
+        self.partitions.push(part)?;
+        self.partitions_mut().sort_unstable_by_key(|p| p.start());
+        Ok(())
+    }
+
+    /// Remove the partition at `index`.
+    // FIXME: Where is the index supposed to come from, exactly?
+    pub fn remove_partition(&mut self, index: usize) -> Partition {
+        self.partitions.remove(index)
+    }
+
+    /// Set the disk UUID.
+    ///
+    /// WARNING: Gpt UUID's MUST be unique.
+    /// Only use this if you know what you're doing.
+    pub fn set_uuid(&mut self, uuid: Uuid) {
+        self.uuid = uuid;
+    }
+}
+
+/// Private APIs
+#[allow(dead_code)]
+impl<C: _GptHelper<C>> _GptC<C> {
+    fn check_overlap(&mut self, part: &Partition) -> Result<()> {
+        for existing in self.partitions() {
+            if part.start() >= existing.start() && part.start() <= existing.end() {
+                return Err(Error::Overlap);
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test_new {
+    use super::*;
+
+    #[test]
+    fn feature() {
+        let gpt: _Gpt = _Gpt::new(Uuid::new_v4());
+        dbg!(gpt);
+        panic!();
+    }
 }
 
 /// Represents a GUID Partition Table
@@ -384,6 +591,7 @@ where
     }
 }
 
+// Public APIs
 impl<N> Gpt<N>
 where
     N: ArrayLength<Partition> + Unsigned,
