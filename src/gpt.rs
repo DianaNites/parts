@@ -855,7 +855,6 @@ mod tests {
     use static_assertions::*;
     use std::io;
 
-    assert_eq_size!(RawPartition, [u8; PARTITION_ENTRY_SIZE as usize]);
     assert_eq_size!(
         Gpt,
         [u8; MIN_PARTITIONS_BYTES as usize + mem::size_of::<[u8; 16]>() + mem::size_of::<u64>()]
