@@ -64,6 +64,14 @@ fn validate<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])>(
     Ok(())
 }
 
+fn default_partitions<N>() -> GenericArray<Partition, N>
+where
+    N: ArrayLength<Partition> + Unsigned,
+    N::ArrayType: Copy,
+{
+    GenericArray::<Partition, N>::generate(|_| Partition::new())
+}
+
 /// Represents a GUID Partition Table
 ///
 /// Note that all modifications are done in-memory
@@ -203,7 +211,7 @@ where
         let primary = Header::from_bytes(&primary[MBR_SIZE..], block_size)?;
         let alt = Header::from_bytes(alt, block_size)?;
         //
-        let mut partitions = GenericArray::<Partition, N>::generate(|_| Partition::new());
+        let mut partitions = default_partitions();
         validate(
             &primary,
             &alt,
@@ -323,7 +331,7 @@ where
     pub fn new() -> Self {
         Gpt {
             uuid: Uuid::new_v4(),
-            partitions: GenericArray::<Partition, N>::generate(|_| Partition::new()),
+            partitions: default_partitions(),
             partitions_len: 0,
         }
     }
@@ -389,7 +397,7 @@ where
     pub fn with_uuid(uuid: Uuid) -> Self {
         Gpt {
             uuid,
-            partitions: GenericArray::<Partition, N>::generate(|_| Partition::new()),
+            partitions: default_partitions(),
             partitions_len: 0,
         }
     }
