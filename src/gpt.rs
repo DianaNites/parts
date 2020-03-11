@@ -571,7 +571,7 @@ mod test {
         partitions::PartitionType,
         util::{Result, *},
     };
-    use std::{io, mem, vec::Vec as StdVec};
+    use std::{io, vec::Vec as StdVec};
 
     type Array<N> = ArrayVec<N>;
     type Vec = StdVec<Partition>;
@@ -698,43 +698,16 @@ mod test {
             panic!("Empty disk was allowed");
         }
     }
-}
 
-#[cfg(any())]
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{
-        partitions::PartitionType,
-        util::{Result, *},
-    };
-    use core::mem;
-    use generic_array::{
-        typenum::{Unsigned, U0, U128, U256, U64},
-        ArrayLength,
-    };
-    use static_assertions::*;
-    use std::io;
-
-    /// Make sure that if a `Gpt<U0>` is written to a device with 1 partition,
-    /// that the partition destroyed/ignored.
-    /// Basically it should output a valid GPT Header
+    /// Make sure that writing out a GptC<ArrayVec<[Partition; N]>> is valid
     #[test]
-    fn destroy_unsupported_partitions() -> Result {
+    fn other_n_partitions() -> Result {
         let mut raw = data()?;
-        let zero_gpt = read_gpt_size::<U0>(&raw)?;
+        let zero_gpt = read_gpt_size::<Array<[Partition; 0]>>(&raw)?;
         zero_gpt
-            .to_bytes_with_size(
-                |i, buf| {
-                    let i = i.0 as usize;
-                    raw[i..][..buf.len()].copy_from_slice(buf);
-                    Ok(())
-                },
-                BLOCK_SIZE,
-                Size::from_bytes(TEN_MIB_BYTES as u64),
-            )
+            .to_bytes(&mut raw, BLOCK_SIZE, Size::from_bytes(TEN_MIB_BYTES as u64))
             .map_err(anyhow::Error::msg)?;
-        let gpt = read_gpt_size::<U128>(&raw)?;
+        let gpt = read_gpt_size::<Vec>(&raw)?;
         assert_eq!(gpt.partitions().len(), 0);
         //
         Ok(())
@@ -743,11 +716,11 @@ mod tests {
     /// Test that add_partition actually works
     ///
     /// Was first implemented using `partitions_mut` so index would
-    /// always be out of bounds. Oops.
+    /// always be out of bounds.
     #[test]
     fn add_partition_regress() -> Result {
         let raw = data()?;
-        let mut gpt = read_gpt_size::<U128>(&raw)?;
+        let mut gpt = read_gpt_size::<Vec>(&raw)?;
         let part = gpt.partitions()[0];
         // Just test that it doesn't panic
         let _ = gpt.add_partition(part);
@@ -758,25 +731,25 @@ mod tests {
     #[test]
     #[ignore]
     #[should_panic(expected = "Attempted to add overlapping partitions")]
+    // TODO: invalid_range_partitions
     fn invalid_range_partitions() {
-        let raw = data().unwrap();
-        let mut gpt = read_gpt_size::<U128>(&raw).unwrap();
-        let part = PartitionBuilder::new(Uuid::new_v4())
-            .start(Size::from_mib(1).into())
-            .size(Size::from_mib(1))
-            .finish(BLOCK_SIZE);
-        let e = gpt.add_partition(part).unwrap_err();
-        panic!(e.to_string());
+        // let raw = data().unwrap();
+        // let mut gpt = read_gpt_size::<Vec>(&raw).unwrap();
+        // let part = PartitionBuilder::new(Uuid::new_v4())
+        //     .start(Size::from_mib(1).into())
+        //     .size(Size::from_mib(1))
+        //     .finish(BLOCK_SIZE);
+        // let e = gpt.add_partition(part).unwrap_err();
+        // panic!(e.to_string());
     }
 
     /// Create a GPT label more-or-less identical to our test data
     #[test]
     fn create_test_parts() -> Result {
         let test_data = data()?;
-        let test_gpt = read_gpt_size::<U128>(&test_data)?;
+        let test_gpt = read_gpt_size::<Vec>(&test_data)?;
         //
-        let mut gpt: Gpt<U128> = Gpt::new();
-        gpt.set_uuid(Uuid::parse_str(CF_DISK_GUID)?);
+        let mut gpt: Gpt<Vec> = Gpt::new(Uuid::parse_str(CF_DISK_GUID)?);
         let part = PartitionBuilder::new(Uuid::parse_str(CF_PART_GUID)?)
             .start(Size::from_mib(1).into())
             .size(Size::from_mib(8))
@@ -791,23 +764,25 @@ mod tests {
     fn empty_partitions() -> Result {
         let mut data = vec![0; TEN_MIB_BYTES];
         let size = Size::from_bytes(TEN_MIB_BYTES as u64);
-        let gpt = Gpt::new();
+        let gpt: Gpt = Gpt::new(Uuid::new_v4());
         gpt.to_bytes(&mut data, BLOCK_SIZE, size)?;
-        let gpt = Gpt::from_bytes(&data, BLOCK_SIZE, size)?;
+        let gpt: Gpt = Gpt::from_bytes(&data, BLOCK_SIZE, size)?;
         assert_eq!(gpt.partitions().len(), 0);
         //
         Ok(())
     }
 
     /// Test that a newly created Gpt has no partitions
+    ///
+    /// This *actually* tests that from_reader works
     #[test]
     fn empty_partitions_std() -> Result {
         let data = vec![0; TEN_MIB_BYTES];
         let mut data = io::Cursor::new(data);
         let size = Size::from_bytes(TEN_MIB_BYTES as u64);
-        let gpt = Gpt::new();
+        let gpt: Gpt = Gpt::new(Uuid::new_v4());
         gpt.to_writer(&mut data, BLOCK_SIZE, size)?;
-        let gpt = Gpt::from_reader(&mut data, BLOCK_SIZE, size)?;
+        let gpt: Gpt = Gpt::from_reader(&mut data, BLOCK_SIZE, size)?;
         assert_eq!(gpt.partitions().len(), 0);
         //
         Ok(())
