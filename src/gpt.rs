@@ -59,7 +59,7 @@ fn validate<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])>(
     Ok(())
 }
 
-trait _GptHelper<C> {
+trait GptHelper<C> {
     const SIZE: usize;
 
     fn new() -> C;
@@ -73,7 +73,7 @@ trait _GptHelper<C> {
     fn remove(&mut self, index: usize) -> Partition;
 }
 
-impl<N: Array<Item = Partition>> _GptHelper<ArrayVec<N>> for ArrayVec<N> {
+impl<N: Array<Item = Partition>> GptHelper<ArrayVec<N>> for ArrayVec<N> {
     const SIZE: usize = mem::size_of::<ArrayVec<N>>();
 
     fn new() -> ArrayVec<N> {
@@ -98,7 +98,7 @@ impl<N: Array<Item = Partition>> _GptHelper<ArrayVec<N>> for ArrayVec<N> {
 }
 
 #[cfg(feature = "std")]
-impl _GptHelper<Vec<Partition>> for Vec<Partition> {
+impl GptHelper<Vec<Partition>> for Vec<Partition> {
     const SIZE: usize = mem::size_of::<Vec<Partition>>();
 
     fn new() -> Vec<Partition> {
@@ -171,7 +171,7 @@ type _Gpt<C = std::vec::Vec<Partition>> = _GptC<C>;
 
 // Public APIs
 #[allow(dead_code)]
-impl<C: _GptHelper<C>> _Gpt<C> {
+impl<C: GptHelper<C>> _Gpt<C> {
     /// New empty Gpt
     ///
     /// WARNING: `uuid` must be unique, such as from [`Uuid::new_v4`].
@@ -473,7 +473,7 @@ impl<C: _GptHelper<C>> _Gpt<C> {
 
 // Private APIs
 #[allow(dead_code)]
-impl<C: _GptHelper<C>> _GptC<C> {
+impl<C: GptHelper<C>> _GptC<C> {
     fn check_overlap(&mut self, part: &Partition) -> Result<()> {
         for existing in self.partitions() {
             if part.start() >= existing.start() && part.start() <= existing.end() {
