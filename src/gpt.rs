@@ -50,7 +50,7 @@ fn validate<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])>(
         &mut func,
         alt.partitions as u64,
         alt.array.into_offset(),
-        &mut cb,
+        &mut |_, _| (),
     )?;
     if crc != alt.partitions_crc32 {
         return Err(Error::Invalid("Backup Partition Array CRC32 mismatch"));
@@ -253,7 +253,10 @@ impl<C: GptHelper<C>> Gpt<C> {
             block_size,
             disk_size,
             |_, source| {
-                let _ = partitions.push(Partition::from_bytes(source, block_size));
+                let part = Partition::from_bytes(source, block_size);
+                if part != Partition::new() {
+                    let _ = partitions.push(part);
+                }
             },
         )?;
 
@@ -563,47 +566,23 @@ mod test_no_std {
 #[cfg(all(test, feature = "std"))]
 mod test {
     use super::*;
-
-    #[test]
-    fn feature() {
-        let gpt: Gpt = Gpt::new(Uuid::new_v4());
-        dbg!(gpt);
-        // panic!();
-    }
-}
-
-#[cfg(any())]
-#[cfg(test)]
-mod tests {
-    use super::*;
     use crate::{
         partitions::PartitionType,
         util::{Result, *},
     };
-    use core::mem;
-    use generic_array::{
-        typenum::{Unsigned, U0, U128, U256, U64},
-        ArrayLength,
-    };
-    use static_assertions::*;
-    use std::io;
+    use std::{io, mem};
 
-    assert_eq_size!(
-        Gpt,
-        [u8; MIN_PARTITIONS_BYTES as usize + mem::size_of::<[u8; 16]>() + mem::size_of::<u64>()]
-    );
+    type Array<N> = ArrayVec<N>;
 
     fn read_gpt_size<N>(raw: &[u8]) -> Result<Gpt<N>>
     where
-        N: Unsigned,
-        N: ArrayLength<Partition>,
-        N::ArrayType: Copy,
+        N: GptHelper<N> + core::fmt::Debug,
     {
         let block = BLOCK_SIZE.0 as usize;
 
         let primary = &raw[..block * 2];
         let alt = &raw[raw.len() - block..];
-        let gpt: Gpt<N> = Gpt::from_bytes_with_size(
+        let gpt: Gpt<N> = Gpt::from_bytes_with_func(
             &primary,
             &alt,
             |i, buf| {
@@ -634,16 +613,34 @@ mod tests {
     #[test]
     fn read_gpt() -> Result {
         let raw = data()?;
-        let gpt = read_gpt_size::<U128>(&raw)?;
-        read_gpt_size::<U0>(&raw)?;
-        read_gpt_size::<U64>(&raw)?;
-        read_gpt_size::<U256>(&raw)?;
-        Gpt::from_bytes(&raw, BLOCK_SIZE, Size::from_bytes(TEN_MIB_BYTES as u64))?;
+        read_gpt_size::<Array<[Partition; 128]>>(&raw)?;
+        read_gpt_size::<Array<[Partition; 0]>>(&raw)?;
+        read_gpt_size::<Array<[Partition; 64]>>(&raw)?;
+        read_gpt_size::<Array<[Partition; 256]>>(&raw)?;
+        let _: Gpt = Gpt::from_bytes(&raw, BLOCK_SIZE, Size::from_bytes(TEN_MIB_BYTES as u64))?;
         //
+        let gpt = read_gpt_size::<Vec<Partition>>(&raw)?;
         expected_gpt(gpt);
         //
         Ok(())
     }
+}
+
+#[cfg(any())]
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        partitions::PartitionType,
+        util::{Result, *},
+    };
+    use core::mem;
+    use generic_array::{
+        typenum::{Unsigned, U0, U128, U256, U64},
+        ArrayLength,
+    };
+    use static_assertions::*;
+    use std::io;
 
     //
     #[test]
