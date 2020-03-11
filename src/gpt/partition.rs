@@ -263,6 +263,8 @@ impl PartitionBuilder {
     /// Partition size. Required.
     ///
     /// Call one of this or [`PartitionBuilder::end`]
+    ///
+    /// This size will be rounded up to nearest block_size
     pub fn size(mut self, size: Size) -> Self {
         self.end = End::Rel(size);
         self
@@ -297,11 +299,16 @@ impl PartitionBuilder {
             End::Rel(end) => Offset(self.start.0 + end.as_bytes()),
             End::None => panic!("Invalid Partition Creation"),
         };
-        let end = Offset(
+        // Because last block is inclusive.
+        let mut end = Offset(
             end.0
                 .checked_sub(block_size.0)
                 .expect("Invalid Partition Size"),
         );
+        // Round up
+        if (end.0 % block_size.0) != 0 {
+            end = Offset(end.0 + (block_size.0 - (end.0 % block_size.0)));
+        }
         let mut name = ArrayString::from_byte_string(&self.name).unwrap();
         // Need to remove null bytes
         name.truncate(core::cmp::min(
