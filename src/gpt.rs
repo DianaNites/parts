@@ -59,17 +59,26 @@ fn validate<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])>(
     Ok(())
 }
 
+/// Helper trait for [`GptC`].
+///
+/// You shouldn't need to worry about this.
 pub trait GptHelper<C> {
+    /// size_of `C`
     const SIZE: usize;
 
+    /// New C
     fn new() -> C;
 
+    /// C.as_slice
     fn as_slice(&self) -> &[Partition];
 
+    /// C.as_mut_slice
     fn as_mut_slice(&mut self) -> &mut [Partition];
 
+    /// C.push
     fn push(&mut self, part: Partition) -> Result<()>;
 
+    /// C.remove
     fn remove(&mut self, index: usize) -> Partition;
 }
 
