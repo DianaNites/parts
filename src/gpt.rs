@@ -157,7 +157,7 @@ impl GptHelper<Vec<Partition>> for Vec<Partition> {
 /// # use parts::{arrayvec::ArrayVec, GptC, Partition, uuid::Uuid};
 /// let gpt: GptC<ArrayVec<[Partition; 4]>> = GptC::new(Uuid::new_v4());
 /// ```
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct GptC<C> {
     uuid: Uuid,
     partitions: C,
@@ -190,11 +190,12 @@ impl<C: GptHelper<C>> Gpt<C> {
     /// - If the GPT is invalid
     /// - If `source` is not `disk_size`
     pub fn from_bytes(source: &[u8], block_size: BlockSize, disk_size: Size) -> Result<Self> {
-        assert_eq!(
-            source.len(),
-            disk_size.as_bytes().try_into().unwrap(),
-            "Invalid source"
-        );
+        if source.len() != disk_size.as_bytes().try_into().unwrap() {
+            return Err(Error::NotEnough);
+        }
+        if disk_size.as_bytes() == 0 {
+            return Err(Error::NotEnough);
+        }
         let b_size = block_size.0 as usize;
         let d_size = disk_size.as_bytes() as usize;
         let primary = &source[..b_size * 2];
@@ -648,6 +649,55 @@ mod test {
         assert_eq!(new_gpt, gpt);
         Ok(())
     }
+
+    #[test]
+    #[should_panic = "Invalid Signature"]
+    fn missing_gpt_test() {
+        let mut raw = data().unwrap();
+        raw[512..][..512].copy_from_slice(&[0; 512]);
+        let _gpt = read_gpt_size::<Vec>(&raw).unwrap();
+    }
+
+    /// Test that the from_reader/to_writer methods work correctly
+    #[test]
+    fn reader_writer() -> Result {
+        let disk_size = Size::from_bytes(TEN_MIB_BYTES as u64);
+        let raw = data()?;
+        let mut raw = std::io::Cursor::new(raw);
+        let gpt = Gpt::from_reader(&mut raw, BLOCK_SIZE, disk_size)?;
+        expected_gpt(gpt.clone());
+        //
+        raw.write_all(&b"\0".repeat(TEN_MIB_BYTES))?;
+        gpt.to_writer(&mut raw, BLOCK_SIZE, disk_size)?;
+        let gpt = Gpt::from_reader(&mut raw, BLOCK_SIZE, disk_size)?;
+        expected_gpt(gpt);
+        //
+        Ok(())
+    }
+
+    /// Don't panic on slice indexing if given an empty slice,
+    /// and don't allow an empty disk
+    #[test]
+    fn empty_regress() {
+        let raw = StdVec::new();
+        let gpt = Gpt::<Vec>::from_bytes(
+            raw.as_slice(),
+            BLOCK_SIZE,
+            Size::from_bytes(TEN_MIB_BYTES as u64),
+        );
+        let e = gpt.unwrap_err();
+        if let Error::NotEnough = e {
+        } else {
+            panic!("Wrong error");
+        }
+        //
+        let gpt = Gpt::<Vec>::from_bytes(raw.as_slice(), BLOCK_SIZE, Size::from_bytes(0));
+        let e = gpt.unwrap_err();
+        if let Error::NotEnough = e {
+        } else {
+            panic!("Empty disk was allowed");
+        }
+    }
 }
 
 #[cfg(any())]
@@ -665,51 +715,6 @@ mod tests {
     };
     use static_assertions::*;
     use std::io;
-
-    #[test]
-    #[should_panic = "Invalid Signature"]
-    fn missing_gpt_test() {
-        let mut raw = data().unwrap();
-        raw[512..][..512].copy_from_slice(&[0; 512]);
-        let _gpt = read_gpt_size::<U128>(&raw).unwrap();
-    }
-
-    /// Test that the from_reader/to_writer methods work correctly
-    #[test]
-    #[cfg(feature = "std")]
-    fn std_gpt_test() -> Result {
-        let raw = data()?;
-        let raw = std::io::Cursor::new(raw);
-        let gpt = Gpt::from_reader(raw, BLOCK_SIZE, Size::from_bytes(TEN_MIB_BYTES as u64))?;
-        expected_gpt(gpt);
-        //
-        Ok(())
-    }
-
-    /// Don't panic on slice indexing if given an empty slice
-    #[test]
-    // FIXME: from_bytes_with_size takes `primary` and `alt`,
-    // and panics if they're not block_size.
-    #[ignore]
-    fn empty_bytes_regress() {
-        let raw = &[];
-        let gpt = Gpt::<U128>::from_bytes_with_size(
-            raw,
-            raw,
-            |i, buf| {
-                let i = i.0 as usize;
-                let size = buf.len();
-                buf.copy_from_slice(&raw[i..][..size]);
-                Ok(())
-            },
-            BLOCK_SIZE,
-            Size::from_bytes(TEN_MIB_BYTES as u64),
-        );
-        let e = gpt.unwrap_err();
-        if let Error::NotEnough = e {
-            panic!("Wrong error");
-        }
-    }
 
     /// Make sure that if a `Gpt<U0>` is written to a device with 1 partition,
     /// that the partition destroyed/ignored.
