@@ -6,6 +6,7 @@ use super::{
 use crate::{partitions::PartitionType, types::*};
 use core::{
     char::{decode_utf16, REPLACEMENT_CHARACTER},
+    fmt,
     mem,
     slice,
     str::from_utf8,
@@ -77,7 +78,7 @@ pub struct RawPartition {
 /// # Examples
 ///
 /// TODO: List all partitions on a device
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct Partition {
     /// Defines the type of this partition
     partition_type: PartitionType,
@@ -179,6 +180,19 @@ impl Partition {
     /// Partition ending offset
     pub fn end(&self) -> Offset {
         self.end
+    }
+}
+
+impl fmt::Debug for Partition {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Partition")
+            .field("partition_type", &self.partition_type)
+            .field("uuid", &self.guid)
+            .field("start", &self.start)
+            .field("end", &self.end)
+            .field("attributes", &self.attributes)
+            .field("name", &self.name())
+            .finish()
     }
 }
 
