@@ -4,19 +4,14 @@ use super::{
     header::{uuid_hack, PARTITION_ENTRY_SIZE},
 };
 use crate::{partitions::PartitionType, types::*};
+use arrayvec::ArrayString;
 use core::{
     char::{decode_utf16, REPLACEMENT_CHARACTER},
     fmt,
     mem,
     slice,
-    str::from_utf8,
 };
 use crc::{crc32, Hasher32};
-use generic_array::{
-    sequence::GenericSequence,
-    typenum::{U36, U70},
-    GenericArray,
-};
 use uuid::Uuid;
 
 /// A minimum of 16,384 bytes are reserved for the partition array.
@@ -51,7 +46,7 @@ pub fn calculate_part_crc<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(u
 }
 
 /// Raw partition structure
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone)]
 #[repr(C)]
 pub struct RawPartition {
     /// Defines the type of this partition
@@ -70,7 +65,20 @@ pub struct RawPartition {
     attributes: u64,
 
     /// Null-terminated name, UCS-2/UTF-16LE string,
-    name: GenericArray<u16, U36>,
+    name: [u16; 36],
+}
+
+impl Default for RawPartition {
+    fn default() -> Self {
+        Self {
+            partition_type_guid: Default::default(),
+            partition_guid: Default::default(),
+            starting_lba: Default::default(),
+            ending_lba: Default::default(),
+            attributes: Default::default(),
+            name: [0; 36],
+        }
+    }
 }
 
 /// A GPT Partition
@@ -97,8 +105,9 @@ pub struct Partition {
     attributes: u64,
 
     /// Partition name, converted from UTF-16-LE
-    /// U70 because null-terminated, we don't need the null.
-    name: GenericArray<u8, U70>,
+    ///
+    /// Hard-coded limit of 70 bytes, last two MUST be null
+    name: ArrayString<[u8; 72]>,
 }
 
 impl Partition {
@@ -116,13 +125,12 @@ impl Partition {
     pub(crate) fn from_bytes(source: &[u8], block_size: BlockSize) -> Self {
         #[allow(clippy::cast_ptr_alignment)]
         let part = unsafe { (source.as_ptr() as *const RawPartition).read_unaligned() };
-        let mut name: GenericArray<u8, U70> = Default::default();
-        let mut offset = 0;
-        decode_utf16(part.name)
+        let mut name = ArrayString::new();
+        decode_utf16(part.name.iter().cloned())
             .map(|r| r.unwrap_or(REPLACEMENT_CHARACTER))
+            .filter(|c| *c != '\0')
             .for_each(|r| {
-                r.encode_utf8(&mut name[offset..]);
-                offset += r.len_utf8();
+                name.push(r);
             });
         Partition {
             partition_type: PartitionType::from_uuid(uuid_hack(part.partition_type_guid)),
@@ -157,9 +165,7 @@ impl Partition {
     /// Partition name.
     // TODO: Use Option?
     pub fn name(&self) -> &str {
-        from_utf8(&self.name)
-            .unwrap()
-            .trim_end_matches(|c| c == '\0')
+        &self.name
     }
 
     /// Partition type
@@ -216,7 +222,7 @@ pub struct PartitionBuilder {
     end: End,
     partition_type: PartitionType,
     uuid: Uuid,
-    name: [u8; 70],
+    name: [u8; 72],
 }
 
 impl PartitionBuilder {
@@ -229,7 +235,7 @@ impl PartitionBuilder {
             end: Default::default(),
             partition_type: Default::default(),
             uuid,
-            name: [0; 70],
+            name: [0; 72],
         }
     }
 
@@ -289,13 +295,19 @@ impl PartitionBuilder {
                 .checked_sub(block_size.0)
                 .expect("Invalid Partition Size"),
         );
+        let mut name = ArrayString::from_byte_string(&self.name).unwrap();
+        // Need to remove null bytes
+        name.truncate(core::cmp::min(
+            self.name.iter().filter(|c| **c != b'\0').count(),
+            70,
+        ));
         Partition {
             partition_type: self.partition_type,
             guid: self.uuid,
             start: self.start,
             end,
             attributes: 0,
-            name: GenericArray::generate(|i| *self.name.get(i).unwrap_or(&0)),
+            name,
         }
     }
 }
@@ -338,16 +350,15 @@ mod tests {
         // Because I was eating pizza when I wrote this.
         let name = "🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕!!";
         assert_eq!(name.len(), 70);
-        let mut raw_name = [0; 70];
+        let mut raw_name = [0; 72];
         raw_name[..name.len()].clone_from_slice(name.as_bytes());
-        let part = Partition {
-            partition_type: PartitionType::Unused,
-            guid: Uuid::nil(),
-            start: Default::default(),
-            end: Default::default(),
-            attributes: 0,
-            name: *GenericArray::from_slice(&raw_name),
-        };
+        //
+        let part = PartitionBuilder::new(Uuid::nil())
+            .start(Offset(0))
+            .end(Offset(BLOCK_SIZE.0))
+            .partition_type(PartitionType::Unused)
+            .name(name)
+            .finish(BLOCK_SIZE);
         assert_eq!(name, part.name());
         part.to_bytes(&mut raw, BLOCK_SIZE);
         //
