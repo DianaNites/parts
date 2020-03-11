@@ -182,7 +182,7 @@ impl Partition {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 enum End {
     None,
     Abs(Offset),
@@ -196,6 +196,7 @@ impl Default for End {
 }
 
 /// Create a Partition
+#[derive(Copy, Clone)]
 pub struct PartitionBuilder {
     start: Offset,
     end: End,
