@@ -26,7 +26,7 @@ pub const MIN_PARTITIONS_BYTES: u64 = 16384;
 
 /// Calculate partition crc32
 ///
-/// See [`Gpt::from_bytes`] for details.
+/// See [`super::Gpt::from_bytes`] for details.
 ///
 /// `CB` receives the filled partition buffer, which is always
 /// PARTITION_ENTRY_SIZE bytes
