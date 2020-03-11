@@ -154,20 +154,20 @@ impl GptHelper<Vec<Partition>> for Vec<Partition> {
 /// _Gpt supporting only 4 partitions.
 ///
 /// ```rust
-/// # use parts::_Gpt;
-/// let gpt: _GptC<ArrayVec<[Partition; 4]>> = _Gpt::new();
+/// # use parts::{arrayvec::ArrayVec, GptC, Partition};
+/// let gpt: GptC<ArrayVec<[Partition; 4]>> = GptC::new();
 /// ```
 #[derive(Debug, PartialEq)]
-struct _GptC<C> {
+struct GptC<C> {
     uuid: Uuid,
     partitions: C,
 }
 
 #[cfg(not(feature = "std"))]
-type _Gpt<C = ArrayVec<[Partition; 128]>> = _GptC<C>;
+type _Gpt<C = ArrayVec<[Partition; 128]>> = GptC<C>;
 
 #[cfg(feature = "std")]
-type _Gpt<C = std::vec::Vec<Partition>> = _GptC<C>;
+type _Gpt<C = std::vec::Vec<Partition>> = GptC<C>;
 
 // Public APIs
 #[allow(dead_code)]
@@ -198,7 +198,7 @@ impl<C: GptHelper<C>> _Gpt<C> {
         let d_size = disk_size.as_bytes() as usize;
         let primary = &source[..b_size * 2];
         let alt = &source[d_size - b_size..];
-        _GptC::from_bytes_with_func(
+        GptC::from_bytes_with_func(
             primary,
             alt,
             |i, buf| {
@@ -256,7 +256,7 @@ impl<C: GptHelper<C>> _Gpt<C> {
             },
         )?;
 
-        Ok(_GptC {
+        Ok(GptC {
             uuid: primary.uuid,
             partitions,
         })
@@ -282,7 +282,7 @@ impl<C: GptHelper<C>> _Gpt<C> {
         source.read_exact(&mut primary)?;
         source.seek(SeekFrom::Start(last_lba.into_offset().0))?;
         source.read_exact(&mut alt)?;
-        let gpt = _GptC::from_bytes_with_func(
+        let gpt = GptC::from_bytes_with_func(
             &primary,
             &alt,
             |i, buf| {
@@ -473,7 +473,7 @@ impl<C: GptHelper<C>> _Gpt<C> {
 
 // Private APIs
 #[allow(dead_code)]
-impl<C: GptHelper<C>> _GptC<C> {
+impl<C: GptHelper<C>> GptC<C> {
     fn check_overlap(&mut self, part: &Partition) -> Result<()> {
         for existing in self.partitions() {
             if part.start() >= existing.start() && part.start() <= existing.end() {
