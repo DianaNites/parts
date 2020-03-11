@@ -508,7 +508,7 @@ impl<C: GptHelper<C>> GptC<C> {
 
 /// Tests that should work without std
 #[cfg(test)]
-mod test_new_no_std {
+mod test_no_std {
     use super::*;
     use crate::PartitionType;
     use core::mem;
@@ -561,7 +561,7 @@ mod test_new_no_std {
 }
 
 #[cfg(all(test, feature = "std"))]
-mod test_new {
+mod test {
     use super::*;
 
     #[test]
