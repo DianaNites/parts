@@ -306,8 +306,9 @@ impl PartitionBuilder {
                 .expect("Invalid Partition Size"),
         );
         // Round up
-        if (end.0 % block_size.0) != 0 {
-            end = Offset(end.0 + (block_size.0 - (end.0 % block_size.0)));
+        let e = end.0 % block_size.0;
+        if e != 0 {
+            end = Offset(end.0 + (block_size.0 - e));
         }
         let mut name = ArrayString::from_byte_string(&self.name).unwrap();
         // Need to remove null bytes
