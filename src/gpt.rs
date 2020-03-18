@@ -15,6 +15,18 @@ pub mod error;
 mod header;
 pub mod partition;
 
+/// Validate the Gpt Headers.
+///
+/// Calls `cb` when going through the primary partition array.
+/// This is used to add partitions in `GptC`
+///
+/// Per the GPT Spec this checks:
+///
+/// - The signature
+/// - Header CRC
+/// - [`Header::this`]
+/// - Partition CRC
+/// - For the primary, [`Header::alt`]
 fn validate<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8]) -> Result<()>>(
     primary: &Header,
     alt: &Header,
