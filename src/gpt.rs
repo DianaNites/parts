@@ -98,7 +98,7 @@ impl<N: Array<Item = Partition>> GptHelper<ArrayVec<N>> for ArrayVec<N> {
     }
 
     fn push(&mut self, part: Partition) -> Result<()> {
-        self.try_push(part).map_err(|_| Error::Overlap)
+        self.try_push(part).map_err(|_| Error::NotEnough)
     }
 
     fn remove(&mut self, index: usize) -> Partition {
