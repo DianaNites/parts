@@ -196,4 +196,19 @@ mod tests {
         let _mbr = ProtectiveMbr::from_bytes(&data[..MBR_SIZE])?;
         Ok(())
     }
+
+    #[test]
+    fn roundtrip() -> Result {
+        let raw = data()?;
+        let raw_mbr = &raw[..MBR_SIZE];
+        let my_mbr = ProtectiveMbr::from_bytes(raw_mbr)?;
+        let mut raw_my_mbr = [0u8; MBR_SIZE];
+        my_mbr.to_bytes(&mut raw_my_mbr)?;
+        //
+        assert_eq!(&raw_my_mbr[..], &raw_mbr[..]);
+        let parsed_raw_my_mbr = ProtectiveMbr::from_bytes(&raw_my_mbr)?;
+        assert_eq!(parsed_raw_my_mbr, my_mbr);
+        //
+        Ok(())
+    }
 }
