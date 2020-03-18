@@ -138,12 +138,6 @@ impl GptHelper<Vec<Partition>> for Vec<Partition> {
 /// Note that all modifications are done in-memory
 /// and *only* effect partition entries, not the data in them.
 ///
-/// # Serde
-///
-/// This struct can be (de)serialized with serde,
-/// but note that on it's own cannot recreate a GPT,
-/// you should also save the block size.
-///
 /// # Memory
 ///
 /// When using `std`, partitions are by default stored in a `Vec`,
