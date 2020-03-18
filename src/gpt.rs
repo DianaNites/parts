@@ -135,8 +135,15 @@ impl GptHelper<Vec<Partition>> for Vec<Partition> {
 
 /// Represents a GUID Partition Table
 ///
-/// Note that all modifications are done in-memory,
+/// All modifications are done in-memory,
 /// and when *only* effect partition entries, not the data in them.
+///
+/// Changes only take affect when [`GptC::to_bytes`]/[`GptC::to_writer`] is
+/// called.
+///
+/// This type is agnostic to the underlying disk and block size.
+/// It's possible to read a Gpt from one disk and write it to another without
+/// worry. As a result these values must be supplied when reading/writing.
 ///
 /// # Memory Usage
 ///
