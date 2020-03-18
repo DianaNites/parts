@@ -335,13 +335,12 @@ impl<C: GptHelper<C>> Gpt<C> {
     ///
     /// # Errors
     ///
-    /// - If I/O does.
+    /// - [`Error::Invalid`] if the GPT is invalid
+    /// - [`Error::NotEnough`] if `source` is too small.
+    /// - [`Error::Io`] if I/O does.
     #[cfg(feature = "std")]
-    pub fn from_reader<RS: Read + Seek>(
-        mut source: RS,
-        block_size: BlockSize,
-        disk_size: Size,
-    ) -> Result<Self> {
+    pub fn from_reader<RS: Read + Seek>(mut source: RS, block_size: BlockSize) -> Result<Self> {
+        let disk_size = Size::from_bytes(source.seek(SeekFrom::End(0))?);
         let last_lba = (disk_size / block_size) - 1;
         let mut primary = vec![0; (block_size.0 * 2) as usize];
         let mut alt = vec![0; block_size.0 as usize];
@@ -746,12 +745,13 @@ mod test {
         let disk_size = Size::from_bytes(TEN_MIB_BYTES as u64);
         let raw = data()?;
         let mut raw = std::io::Cursor::new(raw);
-        let gpt = Gpt::from_reader(&mut raw, BLOCK_SIZE, disk_size)?;
+        let gpt = Gpt::from_reader(&mut raw, BLOCK_SIZE)?;
         expected_gpt(gpt.clone());
         //
+        raw.seek(SeekFrom::Start(0))?;
         raw.write_all(&b"\0".repeat(TEN_MIB_BYTES))?;
         gpt.to_writer(&mut raw, BLOCK_SIZE, disk_size)?;
-        let gpt = Gpt::from_reader(&mut raw, BLOCK_SIZE, disk_size)?;
+        let gpt = Gpt::from_reader(&mut raw, BLOCK_SIZE)?;
         expected_gpt(gpt);
         //
         Ok(())
@@ -840,7 +840,7 @@ mod test {
         let size = Size::from_bytes(TEN_MIB_BYTES as u64);
         let gpt: Gpt = Gpt::new(Uuid::new_v4());
         gpt.to_writer(&mut data, BLOCK_SIZE, size)?;
-        let gpt: Gpt = Gpt::from_reader(&mut data, BLOCK_SIZE, size)?;
+        let gpt: Gpt = Gpt::from_reader(&mut data, BLOCK_SIZE)?;
         assert_eq!(gpt.partitions().len(), 0);
         //
         Ok(())
