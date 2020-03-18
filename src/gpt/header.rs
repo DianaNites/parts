@@ -189,7 +189,7 @@ impl Header {
             // Partition array, plus the MBR and GPT header
             first_usable: array_end + 2,
             // Partition array, minus GPT header
-            last_usable: last - (array_end - 1).into(),
+            last_usable: last - array_end.into() - 1,
             uuid: disk_uuid,
             partitions,
             //
