@@ -206,26 +206,27 @@ impl<C: GptHelper<C>> Gpt<C> {
     ///
     /// # Errors
     ///
-    /// - If the GPT is invalid
-    /// - If `source` is not `disk_size`
+    /// - [`Error::Invalid`] if the GPT is invalid
+    /// - [`Error::NotEnough`] if `source` is too small.
     pub fn from_bytes(source: &[u8], block_size: BlockSize, disk_size: Size) -> Result<Self> {
-        if source.len() != disk_size.as_bytes().try_into().unwrap() {
-            return Err(Error::NotEnough);
-        }
-        if disk_size.as_bytes() == 0 {
-            return Err(Error::NotEnough);
-        }
+        // TODO: Check minimum size?
         let b_size = block_size.0 as usize;
         let d_size = disk_size.as_bytes() as usize;
-        let primary = &source[..b_size * 2];
-        let alt = &source[d_size - b_size..];
+        let primary = source.get(..b_size * 2).ok_or(Error::NotEnough)?;
+        let alt = source.get(d_size - b_size..).ok_or(Error::NotEnough)?;
         GptC::from_bytes_with_func(
             primary,
             alt,
             |i, buf| {
                 let i = i.0 as usize;
                 let size = buf.len();
-                buf.copy_from_slice(&source[i..][..size]);
+                buf.copy_from_slice(
+                    source
+                        .get(i..)
+                        .ok_or(Error::NotEnough)?
+                        .get(..size)
+                        .ok_or(Error::NotEnough)?,
+                );
                 Ok(())
             },
             block_size,
@@ -243,13 +244,44 @@ impl<C: GptHelper<C>> Gpt<C> {
     /// `func` receives a byte offset into the device,
     /// and a buffer to read into.
     ///
-    /// See [`Gpt::from_bytes`] for more details.
-    ///
     /// # Errors
     ///
+    /// - [`Error::Invalid`] if the GPT is invalid
+    /// - [`Error::NotEnough`] if `source`/`primary`/`alt` is too small.
     /// - If `func` does.
     ///
     /// # Examples
+    ///
+    /// Reads from a single byte slice.
+    ///
+    /// This example is better served by [`GptC::from_bytes`],
+    /// but this method is useful when you don't have a single byte slice,
+    /// as you can read from whatever you want to `buf`
+    ///
+    /// ```rust,no_run
+    /// # use parts::{Gpt, Error, types::{BlockSize, Size}};
+    /// # fn main() -> anyhow::Result<()> {
+    /// # let source = &[];
+    /// # let primary = &[];
+    /// # let alt = &[];
+    /// let gpt: Gpt = Gpt::from_bytes_with_func(
+    ///     primary,
+    ///     alt,
+    ///     |offset, buf| {
+    ///         let offset = offset.0 as usize;
+    ///         let len = buf.len();
+    ///         let data = source.get(offset..)
+    ///             .ok_or(Error::NotEnough)?
+    ///             .get(..len)
+    ///             .ok_or(Error::NotEnough)?;
+    ///         buf.copy_from_slice(data);
+    ///         Ok(())
+    ///     },
+    ///     BlockSize(512),
+    ///     Size::from_mib(10)
+    /// )?;
+    /// # Ok(()) }
+    /// ```
     pub fn from_bytes_with_func<F: FnMut(Offset, &mut [u8]) -> Result<()>>(
         primary: &[u8],
         alt: &[u8],
