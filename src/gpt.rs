@@ -331,7 +331,7 @@ impl<C: GptHelper<C>> Gpt<C> {
 
     /// Read the Gpt from `source`
     ///
-    /// See [`Gpt::from_bytes`] for more details.
+    /// See [`GptC::from_bytes`] for more details.
     ///
     /// # Errors
     ///
@@ -400,7 +400,7 @@ impl<C: GptHelper<C>> Gpt<C> {
     /// `func` receives a byte offset, and a buffer to read from.
     /// It is your responsibility to write the buffer to the device.
     ///
-    /// See [`Gpt::to_bytes`] for more details.
+    /// See [`GptC::to_bytes`] for more details.
     ///
     /// # Errors
     ///
