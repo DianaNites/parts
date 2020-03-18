@@ -20,9 +20,6 @@ pub enum Error {
     /// will be returned rather than this.
     NotEnough,
 
-    /// Encountered an unsupported GPT format
-    Unsupported,
-
     /// The GPT Header was invalid: {0}
     Invalid(&'static str),
 
