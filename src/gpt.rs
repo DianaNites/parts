@@ -37,7 +37,7 @@ fn validate<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8]) -
     }
     let last_lba = (disk_size / block_size) - 1;
     if primary.alt != last_lba {
-        return Err(Error::Invalid("Corrupt Primary GPT Header"));
+        return Err(Error::Invalid("Corrupt Backup GPT Header"));
     }
     //
     if alt.this != last_lba {
