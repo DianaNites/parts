@@ -243,7 +243,9 @@ impl Header {
         }
         // See [`RawHeader::header_size`]
         if raw.header_size < HEADER_SIZE || raw.header_size as u64 > block_size.0 {
-            return Err(Error::Invalid("Invalid header size"));
+            return Err(Error::Invalid(
+                "Header size invalid, less than 92 or bigger than the block size",
+            ));
         }
         if raw.header_crc32 != calculate_crc(raw, &source[HEADER_SIZE as usize..]) {
             return Err(Error::Invalid("CRC mismatch"));
