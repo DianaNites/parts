@@ -548,7 +548,7 @@ mod test_no_std {
     );
 
     #[test]
-    #[should_panic = "Invalid Protective MBR"]
+    #[should_panic = "MBR signature invalid"]
     fn missing_mbr_test() {
         let raw = [0; (BLOCK_SIZE.0 * 2) as usize];
         let _gpt: Gpt =
