@@ -1,9 +1,15 @@
 //! Handle GPT header
-use super::{error::*, partition::MIN_PARTITIONS_BYTES};
+use super::error::*;
 use crate::types::*;
 use core::{mem, slice};
 use crc::{crc32, Hasher32};
 use uuid::Uuid;
+
+/// A minimum of 16,384 bytes are reserved for the partition array.
+///
+/// With current GPT Partition entry sizes this means a minimum of 128
+/// partitions
+const MIN_PARTITIONS_BYTES: Size = Size::from_bytes(16384);
 
 /// "EFI PART" constant as a u64
 const EFI_PART: u64 = 0x5452_4150_2049_4645;

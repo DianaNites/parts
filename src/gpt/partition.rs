@@ -14,12 +14,6 @@ use core::{
 use crc::{crc32, Hasher32};
 use uuid::Uuid;
 
-/// A minimum of 16,384 bytes are reserved for the partition array.
-///
-/// With current GPT Partition entry sizes this means a minimum of 128
-/// partitions
-pub const MIN_PARTITIONS_BYTES: u64 = 16384;
-
 /// Calculate partition crc32
 ///
 /// See [`super::Gpt::from_bytes`] for details.
