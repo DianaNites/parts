@@ -6,6 +6,14 @@ use serde_crate::{Deserialize, Serialize};
 
 /// Helper to define ByteSize from_* setters.
 macro_rules! __ByteSizeImplFrom {
+    // FIXME: Remove when const-int-pow is stable.
+    ("Bytes", $p:ident, $v:expr) => {
+        /// Create a [`Size`] from the specified number of `Bytes`
+        pub const fn $p($p: u64) -> Self {
+            Self($p)
+        }
+    };
+
     ($m:expr, $p:ident, $v:expr) => {
         /// Create a [`Size`] from the specified number of `
         #[doc = $m]
@@ -28,10 +36,15 @@ macro_rules! __ByteSizeImplAs {
         }
     };
     ("Bytes", $p:ident, $v:expr) => {
-        __ByteSizeImplAs!(
-            /// Return the number of `Bytes` contained by this [`Size`].
-            @func $p ,$v
-        );
+        // FIXME: Use below when const-int-pow stable
+        // __ByteSizeImplAs!(
+        //     /// Return the number of `Bytes` contained by this [`Size`].
+        //     @func $p ,$v
+        // );
+        /// Return the number of `Bytes` contained by this [`Size`].
+        pub const fn $p(&self) -> u64 {
+            self.0
+        }
     };
     ($m:expr, $p:ident, $v:expr) => {
         __ByteSizeImplAs!(
