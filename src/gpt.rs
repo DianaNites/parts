@@ -22,8 +22,8 @@ pub mod partition;
 ///
 /// Per the GPT Spec this checks:
 ///
-/// - The signature
-/// - Header CRC
+/// - The signature (Checked in [`Header::from_bytes`])
+/// - Header CRC (Checked in [`Header::from_bytes`])
 /// - [`Header::this`]
 /// - Partition CRC
 /// - For the primary, [`Header::alt`]
@@ -36,7 +36,7 @@ fn validate<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8]) -
     mut cb: CB,
 ) -> Result<()> {
     if primary.this != Block::new(1, block_size) {
-        return Err(Error::Invalid("Corrupt Primary GPT Header"));
+        return Err(Error::Invalid("Primary header location invalid"));
     }
     let crc = calculate_part_crc(
         &mut func,
@@ -49,7 +49,7 @@ fn validate<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8]) -
     }
     let last_lba = (disk_size / block_size) - 1;
     if primary.alt != last_lba {
-        return Err(Error::Invalid("Corrupt Backup GPT Header"));
+        return Err(Error::Invalid("Primary header alternate location invalid"));
     }
     //
     if alt.this != last_lba {
