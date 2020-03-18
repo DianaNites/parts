@@ -271,11 +271,10 @@ impl Header {
 
     /// Write the GPT header to `dest`
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// - if `dest` is not [`HEADER_SIZE`] bytes
-    pub fn to_bytes(&self, dest: &mut [u8]) {
-        assert_eq!(dest.len(), HEADER_SIZE as usize, "Invalid dest");
+    /// - [`Error::NotEnough`] if `dest` can't fit the header.
+    pub fn to_bytes(&self, dest: &mut [u8]) -> Result<()> {
         let mut raw = RawHeader::default();
         raw.this_lba = self.this.into();
         raw.alt_lba = self.alt.into();
@@ -292,7 +291,10 @@ impl Header {
         // Safe because we know the sizes
         let raw = unsafe { slice::from_raw_parts(raw, mem::size_of::<RawHeader>()) };
         //
-        dest[..mem::size_of::<RawHeader>()].copy_from_slice(raw);
+        dest.get_mut(..mem::size_of::<RawHeader>())
+            .ok_or(Error::NotEnough)?
+            .copy_from_slice(raw);
+        Ok(())
     }
 }
 
@@ -311,7 +313,7 @@ mod tests {
         let parsed_raw_primary = Header::from_bytes(raw_primary, BLOCK_SIZE)?;
         //
         let mut raw_parsed_raw_primary = [0u8; HEADER_SIZE as usize];
-        parsed_raw_primary.to_bytes(&mut raw_parsed_raw_primary);
+        parsed_raw_primary.to_bytes(&mut raw_parsed_raw_primary)?;
         //
         assert_eq!(
             &raw_parsed_raw_primary[..],
@@ -349,8 +351,8 @@ mod tests {
         //
         let mut raw_my_primary = [0u8; BLOCK_SIZE.0 as usize];
         let mut raw_my_backup = [0u8; BLOCK_SIZE.0 as usize];
-        my_primary.to_bytes(&mut raw_my_primary[..HEADER_SIZE as usize]);
-        my_backup.to_bytes(&mut raw_my_backup[..HEADER_SIZE as usize]);
+        my_primary.to_bytes(&mut raw_my_primary[..HEADER_SIZE as usize])?;
+        my_backup.to_bytes(&mut raw_my_backup[..HEADER_SIZE as usize])?;
         //
         assert_eq!(&raw_my_primary[..], &raw_primary[..]);
         //
@@ -374,7 +376,7 @@ mod tests {
             "UUID didn't match test data"
         );
         let mut written = vec![0; BLOCK_SIZE.0 as usize];
-        header.to_bytes(&mut written[..HEADER_SIZE as usize]);
+        header.to_bytes(&mut written[..HEADER_SIZE as usize])?;
         assert_eq!(
             written.len(),
             raw.len(),
@@ -395,7 +397,7 @@ mod tests {
             "UUID didn't match test data"
         );
         let mut written = vec![0; LARGE_BLOCK_SIZE.0 as usize];
-        header.to_bytes(&mut written[..HEADER_SIZE as usize]);
+        header.to_bytes(&mut written[..HEADER_SIZE as usize])?;
         // Compare only header bytes
         let written = &written[..HEADER_SIZE as usize];
         let raw = &raw[..HEADER_SIZE as usize];

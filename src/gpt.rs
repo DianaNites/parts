@@ -510,7 +510,7 @@ impl<C: GptHelper<C>> GptC<C> {
         let mut header_buf = [0; HEADER_SIZE as usize];
         let mut partition_buf = [0; PARTITION_ENTRY_SIZE as usize];
         //
-        header.to_bytes(&mut header_buf);
+        header.to_bytes(&mut header_buf)?;
         func(last_lba.into_offset(), &header_buf)?;
         for (i, part) in self.partitions.as_slice().iter().enumerate() {
             part.to_bytes(&mut partition_buf, block_size);
