@@ -373,7 +373,7 @@ impl<C: GptHelper<C>> Gpt<C> {
         let last_lba = (disk_size / block_size) - 1;
         let mbr = ProtectiveMbr::new(last_lba);
         let mut mbr_buf = [0; MBR_SIZE];
-        mbr.to_bytes(&mut mbr_buf);
+        mbr.to_bytes(&mut mbr_buf)?;
         func(Size::from_bytes(0).into(), &mbr_buf)?;
         //
         let partition_len = self.partitions.as_slice().len().try_into().unwrap();

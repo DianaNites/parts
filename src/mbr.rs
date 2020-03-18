@@ -83,12 +83,11 @@ impl ProtectiveMbr {
     /// # Errors
     ///
     /// - If the MBR is invalid
-    ///
-    /// # Panics
-    ///
-    /// - If `source` is not [`MBR_SIZE`] bytes.
+    /// - [`Error::NotEnough`] if `source` is not [`MBR_SIZE`] bytes.
     pub fn from_bytes(source: &[u8]) -> Result<Self> {
-        assert_eq!(source.len(), MBR_SIZE, "Invalid source");
+        if source.len() != MBR_SIZE {
+            return Err(Error::NotEnough);
+        }
         // Safe because ProtectiveMbr is simple and repr(C, packed),
         // any value is valid, and we check the size of `source` above.
         let mbr = unsafe { (source.as_ptr() as *const ProtectiveMbr).read_unaligned() };
@@ -98,15 +97,18 @@ impl ProtectiveMbr {
 
     /// Write a GPT Protective MBR to `dest`
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// - If `dest` is not [`MBR_SIZE`] bytes
-    pub fn to_bytes(&self, dest: &mut [u8]) {
-        assert_eq!(dest.len(), MBR_SIZE, "Invalid dest");
+    /// - [`Error::NotEnough`] if `source` is not [`MBR_SIZE`] bytes.
+    pub fn to_bytes(&self, dest: &mut [u8]) -> Result<()> {
+        if dest.len() != MBR_SIZE {
+            return Err(Error::NotEnough);
+        }
         let raw = self as *const ProtectiveMbr as *const u8;
         // Safe because we know the sizes
         let raw = unsafe { core::slice::from_raw_parts(raw, size_of::<ProtectiveMbr>()) };
         dest.copy_from_slice(raw);
+        Ok(())
     }
 }
 
