@@ -30,15 +30,12 @@ std = [
     "thiserror",
     "uuid/std",
     "uuid/v4",
-    # FIXME: Serde won't be able to handle Gpt<Vec> because the std feature is disabled
-    # But enabling it here makes std depend on serde?
 ]
 # Enable serde support
 serde = [
     "serde_crate",
     "serde_crate/derive",
     "uuid/serde",
-    "arrayvec/serde",
 ]
 # Nightly is used for docs.
 nightly = []
@@ -47,3 +44,4 @@ nightly = []
 features = [
     "nightly",
 ]
+targets = []
