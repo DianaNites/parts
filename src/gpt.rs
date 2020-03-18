@@ -256,8 +256,7 @@ impl<C: GptHelper<C>> Gpt<C> {
         let b_size = block_size.0 as usize;
         assert_eq!(primary.len(), b_size * 2, "Invalid primary");
         assert_eq!(alt.len(), b_size, "Invalid alt");
-        let _mbr = ProtectiveMbr::from_bytes(&primary[..MBR_SIZE])
-            .map_err(|_| Error::Invalid("Invalid Protective MBR"))?;
+        let _mbr = ProtectiveMbr::from_bytes(&primary[..MBR_SIZE])?;
         let primary = Header::from_bytes(&primary[MBR_SIZE..], block_size)?;
         let alt = Header::from_bytes(alt, block_size)?;
         //

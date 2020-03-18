@@ -1,21 +1,6 @@
 //! MBR definitions
-use crate::types::*;
+use crate::{gpt::error::*, types::*};
 use core::{convert::TryFrom, mem::size_of};
-use displaydoc::Display;
-#[cfg(any(feature = "std", test))]
-use thiserror::Error;
-
-#[derive(Debug, Display)]
-#[cfg_attr(any(feature = "std", test), derive(Error))]
-pub enum Error {
-    /// The MBR was invalid: {0}
-    InvalidMbr(&'static str),
-
-    /// Not a GUID Partition Table, MBR has real partitions.
-    NotGpt,
-}
-
-type Result<T, E = Error> = core::result::Result<T, E>;
 
 pub const MBR_SIZE: usize = 512;
 
@@ -138,17 +123,17 @@ impl ProtectiveMbr {
     /// - If other partitions exist. In this case the error is [`Error::NotGpt`]
     fn validate(self) -> Result<Self> {
         if self.signature != 0xAA55 {
-            return Err(Error::InvalidMbr("MBR signature invalid. Expected 0xAA55"));
+            return Err(Error::Invalid("MBR signature invalid. Expected 0xAA55"));
         }
         let part: MbrPart = self.partitions[0];
         if part.os_type != 0xEE {
-            return Err(Error::InvalidMbr("Missing GPT Protective Partition"));
+            return Err(Error::Invalid("Missing GPT Protective Partition"));
         }
 
         let parts = self.partitions;
         for part in &parts[1..] {
             if *part != MbrPart::default() {
-                return Err(Error::NotGpt);
+                return Err(Error::Invalid("Protective MBR has other partitions"));
             }
         }
         Ok(self)
