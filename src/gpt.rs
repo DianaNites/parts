@@ -388,8 +388,7 @@ impl<C: GptHelper<C>> Gpt<C> {
         let disk_uuid = self.uuid;
 
         let alt = Header::new(
-            last_lba,
-            Block::new(1, block_size),
+            HeaderKind::Backup,
             partition_len,
             parts_crc,
             disk_uuid,
@@ -408,8 +407,7 @@ impl<C: GptHelper<C>> Gpt<C> {
         self.write_header_array(&mut func, alt, last_lba, block_size)?;
         //
         let primary = Header::new(
-            Block::new(1, block_size),
-            last_lba,
+            HeaderKind::Primary,
             partition_len,
             parts_crc,
             disk_uuid,

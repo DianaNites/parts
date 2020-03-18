@@ -140,6 +140,12 @@ impl Default for RawHeader {
     }
 }
 
+/// Header kind
+pub enum HeaderKind {
+    Primary,
+    Backup,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Header {
     /// The logical block address this header is in
@@ -179,34 +185,45 @@ impl Header {
     /// `partitions_crc32` MUST be calculated over this range,
     /// even if all zeros
     pub fn new(
-        this: Block,
-        alt: Block,
+        kind: HeaderKind,
         partitions: u32,
         partitions_crc32: u32,
         disk_uuid: Uuid,
         block_size: BlockSize,
         disk_size: Size,
     ) -> Self {
-        let array_end = Offset(MIN_PARTITIONS_BYTES) / block_size;
-        let last = (disk_size / block_size) - 1;
+        let (first_usable, last_usable) = Header::usable(block_size, disk_size);
+        // Account for array
+        let alt = last_usable + 1 + (MIN_PARTITIONS_BYTES / block_size).into();
+        //
         Self {
-            this,
-            alt,
-            // Partition array, plus the MBR and GPT header
-            first_usable: array_end + 2,
-            // Partition array, minus GPT header
-            last_usable: last - array_end.into() - 1,
+            this: match kind {
+                HeaderKind::Primary => Block::new(1, block_size),
+                HeaderKind::Backup => alt,
+            },
+            alt: match kind {
+                HeaderKind::Primary => alt,
+                HeaderKind::Backup => Block::new(1, block_size),
+            },
+            first_usable,
+            last_usable,
             uuid: disk_uuid,
             partitions,
             //
-            array: if this == Block::new(1, block_size) {
-                Block::new(2, block_size)
-            } else {
-                last - (array_end.into())
+            array: match kind {
+                HeaderKind::Primary => Block::new(2, block_size),
+                HeaderKind::Backup => last_usable + 1,
             },
             partitions_crc32,
             partition_size: PARTITION_ENTRY_SIZE,
         }
+    }
+
+    /// Returns first and last usable LBA
+    pub fn usable(block_size: BlockSize, disk_size: Size) -> (Block, Block) {
+        let array_end: Block = MIN_PARTITIONS_BYTES / block_size;
+        let last: Block = (disk_size / block_size) - 1;
+        ((array_end + 2), (last - array_end.into() - 1))
     }
 }
 
@@ -286,6 +303,66 @@ mod tests {
     use static_assertions::*;
 
     assert_eq_size!(RawHeader, [u8; HEADER_SIZE as usize]);
+
+    #[test]
+    fn round_trip() -> Result {
+        let raw = data()?;
+        let raw_primary = &raw[BLOCK_SIZE.0 as usize..][..BLOCK_SIZE.0 as usize];
+        let parsed_raw_primary = Header::from_bytes(raw_primary, BLOCK_SIZE)?;
+        //
+        let mut raw_parsed_raw_primary = [0u8; HEADER_SIZE as usize];
+        parsed_raw_primary.to_bytes(&mut raw_parsed_raw_primary);
+        //
+        assert_eq!(
+            &raw_parsed_raw_primary[..],
+            &raw_primary[..HEADER_SIZE as usize]
+        );
+        //
+        Ok(())
+    }
+
+    #[test]
+    fn exact_bytes() -> Result {
+        let raw = data()?;
+        let raw_primary = &raw[BLOCK_SIZE.0 as usize..][..BLOCK_SIZE.0 as usize];
+        let raw_backup = &raw[raw.len() - 512..];
+        //
+        let mut my_primary = Header::new(
+            HeaderKind::Primary,
+            128,         // CFDisk always sets partitions to 128
+            439_418_962, // Expected partition CRC32
+            Uuid::parse_str(CF_DISK_GUID).unwrap(),
+            BLOCK_SIZE,
+            Size::from_bytes(TEN_MIB_BYTES as u64),
+        );
+        let mut my_backup = Header::new(
+            HeaderKind::Backup,
+            128,         // CFDisk always sets partitions to 128
+            439_418_962, // Expected partition CRC32
+            Uuid::parse_str(CF_DISK_GUID).unwrap(),
+            BLOCK_SIZE,
+            Size::from_bytes(TEN_MIB_BYTES as u64),
+        );
+        // CFDisk always uses 2048/1MiB as the first usable block
+        my_primary.first_usable = Block::new(2048, BLOCK_SIZE);
+        my_backup.first_usable = Block::new(2048, BLOCK_SIZE);
+        //
+        let mut raw_my_primary = [0u8; BLOCK_SIZE.0 as usize];
+        let mut raw_my_backup = [0u8; BLOCK_SIZE.0 as usize];
+        my_primary.to_bytes(&mut raw_my_primary[..HEADER_SIZE as usize]);
+        my_backup.to_bytes(&mut raw_my_backup[..HEADER_SIZE as usize]);
+        //
+        assert_eq!(&raw_my_primary[..], &raw_primary[..]);
+        //
+        let parsed_raw_my_backup = Header::from_bytes(&raw_my_backup, BLOCK_SIZE)?;
+        let parsed_raw_backup = Header::from_bytes(&raw_backup, BLOCK_SIZE)?;
+        dbg!(parsed_raw_my_backup.this);
+        dbg!(parsed_raw_backup.this);
+        //
+        assert_eq!(&raw_my_backup[..], &raw_backup[..]);
+        //
+        Ok(())
+    }
 
     #[test]
     fn read_write_header() -> Result {
