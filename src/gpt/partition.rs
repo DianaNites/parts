@@ -1,6 +1,6 @@
 //! Handle partitions
 use super::{
-    error::Result,
+    error::*,
     header::{uuid_hack, PARTITION_ENTRY_SIZE},
 };
 use crate::{partitions::PartitionType, types::*};
@@ -22,7 +22,10 @@ use uuid::Uuid;
 /// PARTITION_ENTRY_SIZE bytes
 ///
 /// `CB` also receives the partition number, starting at zero.
-pub fn calculate_part_crc<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])>(
+pub fn calculate_part_crc<
+    F: FnMut(Offset, &mut [u8]) -> Result<()>,
+    CB: FnMut(usize, &[u8]) -> Result<()>,
+>(
     func: &mut F,
     partitions: u64,
     array_start: Offset,
@@ -33,7 +36,7 @@ pub fn calculate_part_crc<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(u
     for i in 0..partitions {
         let b = Offset(array_start.0 + ((PARTITION_ENTRY_SIZE as u64) * i));
         func(b, &mut buf)?;
-        cb(i as usize, &buf);
+        cb(i as usize, &buf)?;
         digest.write(&buf);
     }
     Ok(digest.sum32())
@@ -116,9 +119,21 @@ impl Partition {
         }
     }
 
-    pub(crate) fn from_bytes(source: &[u8], block_size: BlockSize) -> Self {
+    /// Read from bytes.
+    ///
+    /// Invalid characters in the partition name are replaced.
+    ///
+    /// # Errors
+    ///
+    /// - [`Error::NotEnough`] if `source` is too small
+    pub(crate) fn from_bytes(source: &[u8], block_size: BlockSize) -> Result<Self> {
         #[allow(clippy::cast_ptr_alignment)]
-        let part = unsafe { (source.as_ptr() as *const RawPartition).read_unaligned() };
+        let part = unsafe {
+            if source.len() < mem::size_of::<RawPartition>() {
+                return Err(Error::NotEnough);
+            }
+            (source.as_ptr() as *const RawPartition).read_unaligned()
+        };
         let mut name = ArrayString::new();
         decode_utf16(part.name.iter().cloned())
             .map(|r| r.unwrap_or(REPLACEMENT_CHARACTER))
@@ -126,17 +141,22 @@ impl Partition {
             .for_each(|r| {
                 name.push(r);
             });
-        Partition {
+        Ok(Partition {
             partition_type: PartitionType::from_uuid(uuid_hack(part.partition_type_guid)),
             guid: uuid_hack(part.partition_guid),
             start: Block::new(part.starting_lba, block_size).into_offset(),
             end: Block::new(part.ending_lba, block_size).into_offset(),
             attributes: part.attributes,
             name,
-        }
+        })
     }
 
-    pub(crate) fn to_bytes(&self, dest: &mut [u8], block_size: BlockSize) {
+    /// Write to `dest`
+    ///
+    /// # Errors
+    ///
+    /// - [`Error::NotEnough`] if `dest` is too small.
+    pub(crate) fn to_bytes(&self, dest: &mut [u8], block_size: BlockSize) -> Result<()> {
         let mut raw = RawPartition::default();
         raw.partition_type_guid = *uuid_hack(*self.partition_type.to_uuid().as_bytes()).as_bytes();
         raw.partition_guid = *uuid_hack(*self.guid.as_bytes()).as_bytes();
@@ -151,7 +171,10 @@ impl Partition {
         let raw = &raw as *const RawPartition as *const u8;
         // Safe because we know the sizes
         let raw = unsafe { slice::from_raw_parts(raw, mem::size_of::<RawPartition>()) };
-        dest[..mem::size_of::<RawPartition>()].copy_from_slice(raw);
+        dest.get_mut(..mem::size_of::<RawPartition>())
+            .ok_or(Error::NotEnough)?
+            .copy_from_slice(raw);
+        Ok(())
     }
 }
 
@@ -328,7 +351,7 @@ mod tests {
     fn read_part() -> Result {
         let raw = data()?;
         let raw = &raw[OFFSET..];
-        let part = Partition::from_bytes(raw, BLOCK_SIZE);
+        let part = Partition::from_bytes(raw, BLOCK_SIZE)?;
         assert_eq!(part.partition_type(), PartitionType::LinuxFilesystemData);
         Ok(())
     }
@@ -338,16 +361,16 @@ mod tests {
         let raw = data_parted()?;
         // Skip MBR and GPT header, first partition is there.
         let raw = &raw[OFFSET..];
-        let part = Partition::from_bytes(raw, BLOCK_SIZE);
+        let part = Partition::from_bytes(raw, BLOCK_SIZE)?;
         assert_eq!("Test", part.name());
         let mut new_raw = [0; PARTITION_ENTRY_SIZE as usize];
-        part.to_bytes(&mut new_raw, BLOCK_SIZE);
+        part.to_bytes(&mut new_raw, BLOCK_SIZE)?;
         assert_eq!(&new_raw[..], &raw[..PARTITION_ENTRY_SIZE as usize]);
         Ok(())
     }
 
     #[test]
-    fn part_name_emoji() {
+    fn part_name_emoji() -> Result {
         let mut raw = [0; PARTITION_ENTRY_SIZE as usize];
         // Because I was eating pizza when I wrote this.
         let name = "🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕!!";
@@ -362,9 +385,10 @@ mod tests {
             .name(name)
             .finish(BLOCK_SIZE);
         assert_eq!(name, part.name());
-        part.to_bytes(&mut raw, BLOCK_SIZE);
+        part.to_bytes(&mut raw, BLOCK_SIZE)?;
         //
-        let part = Partition::from_bytes(&raw, BLOCK_SIZE);
+        let part = Partition::from_bytes(&raw, BLOCK_SIZE)?;
         assert_eq!(name, part.name());
+        Ok(())
     }
 }

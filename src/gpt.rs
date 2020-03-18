@@ -15,7 +15,7 @@ pub mod error;
 mod header;
 pub mod partition;
 
-fn validate<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])>(
+fn validate<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8]) -> Result<()>>(
     primary: &Header,
     alt: &Header,
     mut func: F,
@@ -50,7 +50,7 @@ fn validate<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8])>(
         &mut func,
         alt.partitions as u64,
         alt.array.into_offset(),
-        &mut |_, _| (),
+        &mut |_, _| Ok(()),
     )?;
     if crc != alt.partitions_crc32 {
         return Err(Error::Invalid("Backup Partition Array CRC32 mismatch"));
@@ -269,10 +269,11 @@ impl<C: GptHelper<C>> Gpt<C> {
             block_size,
             disk_size,
             |_, source| {
-                let part = Partition::from_bytes(source, block_size);
+                let part = Partition::from_bytes(source, block_size)?;
                 if part != Partition::new() {
                     let _ = partitions.push(part);
                 }
+                Ok(())
             },
         )?;
 
@@ -381,7 +382,7 @@ impl<C: GptHelper<C>> Gpt<C> {
         let mut digest = crc32::Digest::new(crc32::IEEE);
         // FIXME: Invalid for N lower than 128?
         for part in self.partitions.as_slice() {
-            part.to_bytes(&mut partition_buf, block_size);
+            part.to_bytes(&mut partition_buf, block_size)?;
             digest.write(&partition_buf);
         }
         let parts_crc = digest.sum32();
@@ -513,7 +514,7 @@ impl<C: GptHelper<C>> GptC<C> {
         header.to_bytes(&mut header_buf)?;
         func(last_lba.into_offset(), &header_buf)?;
         for (i, part) in self.partitions.as_slice().iter().enumerate() {
-            part.to_bytes(&mut partition_buf, block_size);
+            part.to_bytes(&mut partition_buf, block_size)?;
             let b =
                 Offset(header.array.into_offset().0 + ((PARTITION_ENTRY_SIZE as u64) * i as u64));
             func(b, &partition_buf)?;

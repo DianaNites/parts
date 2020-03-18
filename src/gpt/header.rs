@@ -233,13 +233,11 @@ impl Header {
     /// # Errors
     ///
     /// - The GPT is invalid.
-    ///
-    /// # Panics
-    ///
-    /// - If `source` is not `block_size` bytes
-    pub fn from_bytes(source: &[u8], real_block_size: BlockSize) -> Result<Self> {
-        let block_size = real_block_size.0 as usize;
-        assert_eq!(source.len(), block_size, "Invalid source");
+    /// - [`Error::NotEnough`] if `source` is not `block_size` bytes
+    pub fn from_bytes(source: &[u8], block_size: BlockSize) -> Result<Self> {
+        if source.len() < block_size.0 as usize {
+            return Err(Error::NotEnough);
+        }
         // # Safety
         // - `source` is always a valid pointer
         // - Errors if `source` doesn't have enough data
@@ -249,20 +247,20 @@ impl Header {
             return Err(Error::Invalid("Invalid Signature"));
         }
         // See [`RawHeader::header_size`]
-        if raw.header_size < HEADER_SIZE || raw.header_size as usize >= block_size {
+        if raw.header_size < HEADER_SIZE || raw.header_size as u64 > block_size.0 {
             return Err(Error::Invalid("Invalid header size"));
         }
         if raw.header_crc32 != calculate_crc(raw, &source[HEADER_SIZE as usize..]) {
             return Err(Error::Invalid("CRC mismatch"));
         }
         let header = Header {
-            this: Block::new(raw.this_lba, real_block_size),
-            alt: Block::new(raw.alt_lba, real_block_size),
-            first_usable: Block::new(raw.first_usable_lba, real_block_size),
-            last_usable: Block::new(raw.last_usable_lba, real_block_size),
+            this: Block::new(raw.this_lba, block_size),
+            alt: Block::new(raw.alt_lba, block_size),
+            first_usable: Block::new(raw.first_usable_lba, block_size),
+            last_usable: Block::new(raw.last_usable_lba, block_size),
             uuid: uuid_hack(raw.disk_guid),
             partitions: raw.partitions,
-            array: Block::new(raw.partition_array_start, real_block_size),
+            array: Block::new(raw.partition_array_start, block_size),
             partitions_crc32: raw.partitions_crc32,
             partition_size: raw.partition_size,
         };
