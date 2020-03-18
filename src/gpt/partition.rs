@@ -12,8 +12,6 @@ use core::{
     slice,
 };
 use crc::{crc32, Hasher32};
-#[cfg(feature = "serde")]
-use serde_crate::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// A minimum of 16,384 bytes are reserved for the partition array.
@@ -89,11 +87,6 @@ impl Default for RawPartition {
 ///
 /// TODO: List all partitions on a device
 #[derive(Copy, Clone, PartialEq)]
-#[cfg_attr(
-    feature = "serde",
-    derive(Serialize, Deserialize),
-    serde(crate = "serde_crate")
-)]
 pub struct Partition {
     /// Defines the type of this partition
     partition_type: PartitionType,
