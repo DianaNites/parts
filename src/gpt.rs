@@ -208,12 +208,13 @@ impl<C: GptHelper<C>> Gpt<C> {
     ///
     /// - [`Error::Invalid`] if the GPT is invalid
     /// - [`Error::NotEnough`] if `source` is too small.
-    pub fn from_bytes(source: &[u8], block_size: BlockSize, disk_size: Size) -> Result<Self> {
+    pub fn from_bytes(source: &[u8], block_size: BlockSize) -> Result<Self> {
         // TODO: Check minimum size?
         let b_size = block_size.0 as usize;
-        let d_size = disk_size.as_bytes() as usize;
         let primary = source.get(..b_size * 2).ok_or(Error::NotEnough)?;
-        let alt = source.get(d_size - b_size..).ok_or(Error::NotEnough)?;
+        let alt = source
+            .get(source.len() - b_size..)
+            .ok_or(Error::NotEnough)?;
         GptC::from_bytes_with_func(
             primary,
             alt,
@@ -230,7 +231,7 @@ impl<C: GptHelper<C>> Gpt<C> {
                 Ok(())
             },
             block_size,
-            disk_size,
+            Size::from_bytes(source.len() as u64),
         )
     }
 
@@ -570,7 +571,6 @@ mod test_no_std {
 
     // FIXME: should be from crate::util
     const BLOCK_SIZE: BlockSize = BlockSize(512);
-    const TEN_MIB_BYTES: usize = 10_485_760;
 
     type DefArray = ArrayVec<[Partition; 128]>;
 
@@ -587,8 +587,7 @@ mod test_no_std {
     #[should_panic = "MBR signature invalid"]
     fn missing_mbr_test() {
         let raw = [0; (BLOCK_SIZE.0 * 2) as usize];
-        let _gpt: Gpt =
-            Gpt::from_bytes(&raw, BLOCK_SIZE, Size::from_bytes(BLOCK_SIZE.0 * 2)).unwrap();
+        let _gpt: Gpt = Gpt::from_bytes(&raw, BLOCK_SIZE).unwrap();
     }
 
     /// Prevent adding overlapping partitions
@@ -621,15 +620,14 @@ mod test_no_std {
     /// and don't allow an empty disk
     #[test]
     fn empty_regress() {
-        let gpt =
-            Gpt::<DefArray>::from_bytes(&[], BLOCK_SIZE, Size::from_bytes(TEN_MIB_BYTES as u64));
+        let gpt = Gpt::<DefArray>::from_bytes(&[], BLOCK_SIZE);
         let e = gpt.unwrap_err();
         if let Error::NotEnough = e {
         } else {
             panic!("Wrong error");
         }
         //
-        let gpt = Gpt::<DefArray>::from_bytes(&[], BLOCK_SIZE, Size::from_bytes(0));
+        let gpt = Gpt::<DefArray>::from_bytes(&[], BLOCK_SIZE);
         let e = gpt.unwrap_err();
         if let Error::NotEnough = e {
         } else {
@@ -693,7 +691,7 @@ mod test {
         read_gpt_size::<Array<[Partition; 0]>>(&raw)?;
         read_gpt_size::<Array<[Partition; 64]>>(&raw)?;
         read_gpt_size::<Array<[Partition; 256]>>(&raw)?;
-        let _: Gpt = Gpt::from_bytes(&raw, BLOCK_SIZE, Size::from_bytes(TEN_MIB_BYTES as u64))?;
+        let _: Gpt = Gpt::from_bytes(&raw, BLOCK_SIZE)?;
         //
         let gpt = read_gpt_size::<Vec>(&raw)?;
         expected_gpt(gpt);
@@ -816,7 +814,7 @@ mod test {
         let size = Size::from_bytes(TEN_MIB_BYTES as u64);
         let gpt: Gpt = Gpt::new(Uuid::new_v4());
         gpt.to_bytes(&mut data, BLOCK_SIZE, size)?;
-        let gpt: Gpt = Gpt::from_bytes(&data, BLOCK_SIZE, size)?;
+        let gpt: Gpt = Gpt::from_bytes(&data, BLOCK_SIZE)?;
         assert_eq!(gpt.partitions().len(), 0);
         //
         Ok(())
