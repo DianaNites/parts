@@ -381,20 +381,20 @@ impl<C: GptHelper<C>> Gpt<C> {
     /// - The backup partition array
     /// - The primary header
     /// - The primary partition array
-    pub fn to_bytes(&self, dest: &mut [u8], block_size: BlockSize, disk_size: Size) -> Result<()> {
-        assert_eq!(
-            dest.len(),
-            disk_size.as_bytes().try_into().unwrap(),
-            "Invalid dest"
-        );
+    pub fn to_bytes(&self, dest: &mut [u8], block_size: BlockSize) -> Result<()> {
+        let size = Size::from_bytes(dest.len().try_into().unwrap());
         self.to_bytes_with_func(
             |i, buf| {
                 let i = i.0 as usize;
-                dest[i..][..buf.len()].copy_from_slice(buf);
+                dest.get_mut(i..)
+                    .ok_or(Error::NotEnough)?
+                    .get_mut(..buf.len())
+                    .ok_or(Error::NotEnough)?
+                    .copy_from_slice(buf);
                 Ok(())
             },
             block_size,
-            disk_size,
+            size,
         )
     }
 
@@ -712,20 +712,12 @@ mod test {
     fn gpt_roundtrip() -> Result {
         let mut dest = vec![0; TEN_MIB_BYTES];
         let gpt = read_gpt_size::<Vec>(&data()?)?;
-        gpt.to_bytes(
-            &mut dest,
-            BLOCK_SIZE,
-            Size::from_bytes(TEN_MIB_BYTES as u64),
-        )
-        .map_err(anyhow::Error::msg)?;
+        gpt.to_bytes(&mut dest, BLOCK_SIZE)
+            .map_err(anyhow::Error::msg)?;
         let new_gpt = read_gpt_size::<Vec>(&dest)?;
         assert_eq!(new_gpt, gpt);
         //
-        gpt.to_bytes(
-            &mut dest,
-            BLOCK_SIZE,
-            Size::from_bytes(TEN_MIB_BYTES as u64),
-        )?;
+        gpt.to_bytes(&mut dest, BLOCK_SIZE)?;
         let new_gpt = read_gpt_size::<Vec>(&dest)?;
         assert_eq!(new_gpt, gpt);
         Ok(())
@@ -763,7 +755,7 @@ mod test {
         let mut raw = data()?;
         let zero_gpt = read_gpt_size::<Array<[Partition; 0]>>(&raw)?;
         zero_gpt
-            .to_bytes(&mut raw, BLOCK_SIZE, Size::from_bytes(TEN_MIB_BYTES as u64))
+            .to_bytes(&mut raw, BLOCK_SIZE)
             .map_err(anyhow::Error::msg)?;
         let gpt = read_gpt_size::<Vec>(&raw)?;
         assert_eq!(gpt.partitions().len(), 0);
@@ -821,9 +813,8 @@ mod test {
     #[test]
     fn empty_partitions() -> Result {
         let mut data = vec![0; TEN_MIB_BYTES];
-        let size = Size::from_bytes(TEN_MIB_BYTES as u64);
         let gpt: Gpt = Gpt::new(Uuid::new_v4());
-        gpt.to_bytes(&mut data, BLOCK_SIZE, size)?;
+        gpt.to_bytes(&mut data, BLOCK_SIZE)?;
         let gpt: Gpt = Gpt::from_bytes(&data, BLOCK_SIZE)?;
         assert_eq!(gpt.partitions().len(), 0);
         //
