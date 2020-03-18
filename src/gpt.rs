@@ -135,8 +135,8 @@ impl GptHelper<Vec<Partition>> for Vec<Partition> {
 
 /// Represents a GUID Partition Table
 ///
-/// Note that all modifications are done in-memory
-/// and *only* effect partition entries, not the data in them.
+/// Note that all modifications are done in-memory,
+/// and when *only* effect partition entries, not the data in them.
 ///
 /// # Memory Usage
 ///
