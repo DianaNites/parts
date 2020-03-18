@@ -366,11 +366,8 @@ impl<C: GptHelper<C>> Gpt<C> {
     ///
     /// # Errors
     ///
-    /// - If all partitions do not fit within the usable blocks
-    ///
-    /// # Panics
-    ///
-    /// - If dest is not `disk_size`
+    /// - [`Error::NotEnough`] if `dest` is too small.
+    /// - If all partitions do not fit within the usable blocks.
     ///
     /// # Details
     ///
@@ -400,14 +397,15 @@ impl<C: GptHelper<C>> Gpt<C> {
 
     /// Write the Gpt using `func`.
     ///
-    /// `func` receives a byte offset into the device,
-    /// and a buffer to write to the device.
+    /// `func` receives a byte offset, and a buffer to read from.
+    /// It is your responsibility to write the buffer to the device.
     ///
     /// See [`Gpt::to_bytes`] for more details.
     ///
     /// # Errors
     ///
     /// - If `func` does.
+    /// - If all partitions do not fit within the usable blocks.
     ///
     /// # Examples
     pub fn to_bytes_with_func<F: FnMut(Offset, &[u8]) -> Result<()>>(
@@ -466,18 +464,15 @@ impl<C: GptHelper<C>> Gpt<C> {
 
     /// Write the Gpt to `dest`
     ///
-    /// See [`Gpt::to_bytes`] for more details.
-    ///
     /// # Errors
     ///
-    /// - If I/O does.
+    /// - If all partitions do not fit within the usable blocks.
+    /// - [`Error::NotEnough`] if `dest` is too small.
+    /// - [`Error::Io`] if I/O does.
     #[cfg(feature = "std")]
-    pub fn to_writer<WS: Write + Seek>(
-        &self,
-        mut dest: WS,
-        block_size: BlockSize,
-        disk_size: Size,
-    ) -> Result<()> {
+    pub fn to_writer<WS: Write + Seek>(&self, mut dest: WS, block_size: BlockSize) -> Result<()> {
+        let disk_size = Size::from_bytes(dest.seek(SeekFrom::End(0))?);
+        dest.seek(SeekFrom::Start(0))?;
         self.to_bytes_with_func(
             |i, buf| {
                 dest.seek(SeekFrom::Start(i.0))?;
@@ -734,7 +729,6 @@ mod test {
     /// Test that the from_reader/to_writer methods work correctly
     #[test]
     fn reader_writer() -> Result {
-        let disk_size = Size::from_bytes(TEN_MIB_BYTES as u64);
         let raw = data()?;
         let mut raw = std::io::Cursor::new(raw);
         let gpt = Gpt::from_reader(&mut raw, BLOCK_SIZE)?;
@@ -742,7 +736,7 @@ mod test {
         //
         raw.seek(SeekFrom::Start(0))?;
         raw.write_all(&b"\0".repeat(TEN_MIB_BYTES))?;
-        gpt.to_writer(&mut raw, BLOCK_SIZE, disk_size)?;
+        gpt.to_writer(&mut raw, BLOCK_SIZE)?;
         let gpt = Gpt::from_reader(&mut raw, BLOCK_SIZE)?;
         expected_gpt(gpt);
         //
@@ -828,9 +822,8 @@ mod test {
     fn empty_partitions_std() -> Result {
         let data = vec![0; TEN_MIB_BYTES];
         let mut data = io::Cursor::new(data);
-        let size = Size::from_bytes(TEN_MIB_BYTES as u64);
         let gpt: Gpt = Gpt::new(Uuid::new_v4());
-        gpt.to_writer(&mut data, BLOCK_SIZE, size)?;
+        gpt.to_writer(&mut data, BLOCK_SIZE)?;
         let gpt: Gpt = Gpt::from_reader(&mut data, BLOCK_SIZE)?;
         assert_eq!(gpt.partitions().len(), 0);
         //
