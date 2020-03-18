@@ -290,11 +290,9 @@ impl<C: GptHelper<C>> Gpt<C> {
         block_size: BlockSize,
         disk_size: Size,
     ) -> Result<Self> {
-        let b_size = block_size.0 as usize;
-        assert_eq!(primary.len(), b_size * 2, "Invalid primary");
-        assert_eq!(alt.len(), b_size, "Invalid alt");
-        let _mbr = ProtectiveMbr::from_bytes(&primary[..MBR_SIZE])?;
-        let primary = Header::from_bytes(&primary[MBR_SIZE..], block_size)?;
+        let _mbr = ProtectiveMbr::from_bytes(primary.get(..MBR_SIZE).ok_or(Error::NotEnough)?)?;
+        let primary =
+            Header::from_bytes(primary.get(MBR_SIZE..).ok_or(Error::NotEnough)?, block_size)?;
         let alt = Header::from_bytes(alt, block_size)?;
         //
         let mut partitions = C::new();
