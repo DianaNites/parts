@@ -309,7 +309,7 @@ impl PartitionBuilder {
             End::Rel(end) => Offset(self.start.0 + end.as_bytes()),
             End::None => panic!("Invalid Partition Creation"),
         };
-        // Because last block is inclusive.
+        // Because last block is inclusive?
         let mut end = Offset(
             end.0
                 .checked_sub(block_size.0)
