@@ -306,18 +306,21 @@ impl PartitionBuilder {
     pub fn finish(self, block_size: BlockSize) -> Partition {
         let end = match self.end {
             End::Abs(end) => end,
-            End::Rel(end) => Offset(self.start.0 + end.as_bytes()),
+            End::Rel(end) => {
+                // Minus block because last is inclusive.
+                Offset(
+                    (self.start.0 + end.as_bytes())
+                        .checked_sub(block_size.0)
+                        .expect("Invalid Partition Size"),
+                )
+            }
             End::None => panic!("Invalid Partition Creation"),
         };
-        // Because last block is inclusive?
-        let mut end = Offset(
-            end.0
-                .checked_sub(block_size.0)
-                .expect("Invalid Partition Size"),
-        );
+        let mut end = end;
         // Round up
         let e = end.0 % block_size.0;
         if e != 0 {
+            // TODO: Panic instead?
             end = Offset(end.0 + (block_size.0 - e));
         }
         let mut name = ArrayString::from_byte_string(&self.name).unwrap();

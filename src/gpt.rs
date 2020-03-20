@@ -153,9 +153,10 @@ impl GptHelper<Vec<Partition>> for Vec<Partition> {
 /// Changes only take affect when [`GptC::to_bytes`]/[`GptC::to_writer`] is
 /// called.
 ///
-/// This type is agnostic to the underlying disk and block size.
-/// It's possible to read a Gpt from one disk and write it to another without
-/// worry. As a result these values must be supplied when reading/writing.
+/// This type is largely agnostic to the underlying disk and block size.
+/// It will remember the disk/block size it was created with, for convenience.
+///
+/// Partitions are sorted by their starting offset in the partition array
 ///
 /// # Memory Usage
 ///
@@ -184,14 +185,20 @@ impl GptHelper<Vec<Partition>> for Vec<Partition> {
 /// `GptC` supporting only 4 partitions.
 ///
 /// ```rust
-/// use parts::{arrayvec::ArrayVec, GptC, Partition, uuid::Uuid};
+/// use parts::{arrayvec::ArrayVec, GptC, Partition, uuid::Uuid, types::*};
 ///
-/// let gpt: GptC<ArrayVec<[Partition; 4]>> = GptC::new(Uuid::new_v4());
+/// let gpt: GptC<ArrayVec<[Partition; 4]>> = GptC::new(
+///     Uuid::new_v4(),
+///     Size::from_mib(10),
+///     BlockSize(512)
+/// );
 /// ```
 #[derive(Copy, Debug, Clone, PartialEq)]
 pub struct GptC<C> {
     uuid: Uuid,
     partitions: C,
+    disk_size: Size,
+    block_size: BlockSize,
 }
 
 /// See [`GptC`] for docs.
@@ -206,11 +213,20 @@ pub type Gpt<C = std::vec::Vec<Partition>> = GptC<C>;
 impl<C: GptHelper<C>> Gpt<C> {
     /// New empty Gpt
     ///
-    /// WARNING: `uuid` must be unique, such as from [`Uuid::new_v4`].
-    pub fn new(uuid: Uuid) -> Self {
+    /// `uuid` must be unique, such as from [`Uuid::new_v4`].
+    ///
+    /// # Panics
+    ///
+    /// - If `disk_size` is zero.
+    /// - If `block_size` is zero.
+    pub fn new(uuid: Uuid, disk_size: Size, block_size: BlockSize) -> Self {
+        assert_ne!(disk_size.as_bytes(), 0, "Disk size must not be zero");
+        assert_ne!(block_size.0, 0, "Block size must not be zero");
         Self {
             uuid,
             partitions: C::new(),
+            disk_size,
+            block_size,
         }
     }
 
@@ -326,6 +342,8 @@ impl<C: GptHelper<C>> Gpt<C> {
         Ok(GptC {
             uuid: primary.uuid,
             partitions,
+            disk_size,
+            block_size,
         })
     }
 
@@ -378,7 +396,7 @@ impl<C: GptHelper<C>> Gpt<C> {
     /// - The backup partition array
     /// - The primary header
     /// - The primary partition array
-    pub fn to_bytes(&self, dest: &mut [u8], block_size: BlockSize) -> Result<()> {
+    pub fn to_bytes(&self, dest: &mut [u8]) -> Result<()> {
         let size = Size::from_bytes(dest.len().try_into().unwrap());
         self.to_bytes_with_func(
             |i, buf| {
@@ -390,7 +408,7 @@ impl<C: GptHelper<C>> Gpt<C> {
                     .copy_from_slice(buf);
                 Ok(())
             },
-            block_size,
+            self.block_size,
             size,
         )
     }
@@ -470,7 +488,7 @@ impl<C: GptHelper<C>> Gpt<C> {
     /// - [`Error::NotEnough`] if `dest` is too small.
     /// - [`Error::Io`] if I/O does.
     #[cfg(feature = "std")]
-    pub fn to_writer<WS: Write + Seek>(&self, mut dest: WS, block_size: BlockSize) -> Result<()> {
+    pub fn to_writer<WS: Write + Seek>(&self, mut dest: WS) -> Result<()> {
         let disk_size = Size::from_bytes(dest.seek(SeekFrom::End(0))?);
         dest.seek(SeekFrom::Start(0))?;
         self.to_bytes_with_func(
@@ -479,7 +497,7 @@ impl<C: GptHelper<C>> Gpt<C> {
                 dest.write_all(buf)?;
                 Ok(())
             },
-            block_size,
+            self.block_size,
             disk_size,
         )?;
         Ok(())
@@ -490,12 +508,12 @@ impl<C: GptHelper<C>> Gpt<C> {
         self.uuid
     }
 
-    /// Slice of in-use partitions
+    /// Slice of in-use partitions. Sorted by starting offset.
     pub fn partitions(&self) -> &[Partition] {
         self.partitions.as_slice()
     }
 
-    /// Mutable slice of in-use partitions.
+    /// Mutable slice of in-use partitions. Sorted by starting offset.
     pub fn partitions_mut(&mut self) -> &mut [Partition] {
         self.partitions.as_mut_slice()
     }
@@ -527,7 +545,36 @@ impl<C: GptHelper<C>> Gpt<C> {
         self.uuid = uuid;
     }
 
-    // TODO: First/last usable block getters, and remaining. Store disk/block size?
+    /// Given a `block_size` and `disk_size`,
+    /// return the first usable partition offset
+    pub fn first_usable(&self) -> Offset {
+        Header::usable(self.block_size, self.disk_size)
+            .0
+            .into_offset()
+    }
+
+    /// Given a `block_size` and `disk_size`,
+    /// return the last usable partition offset
+    pub fn last_usable(&self) -> Offset {
+        Header::usable(self.block_size, self.disk_size)
+            .1
+            .into_offset()
+    }
+
+    /// Given a `block_size` and `disk_size`,
+    /// return how much space is remaining for a partition using this `Gpt`.
+    pub fn remaining(&self) -> Size {
+        let (first, last) = Header::usable(self.block_size, self.disk_size);
+        let max = self
+            .partitions()
+            .iter()
+            .max_by_key(|x| x.start())
+            .map(|x| x.end() / self.block_size)
+            .unwrap_or(first);
+        // Plus 1 because inclusive?
+        // TODO: Is this correct? Maths :(
+        ((last - max.into()) + 1).into_offset().into()
+    }
 }
 
 // Private APIs
@@ -579,14 +626,24 @@ mod test_no_std {
     type DefArray = ArrayVec<[Partition; 128]>;
 
     #[cfg(feature = "std")]
-    assert_eq_size!(Gpt, [u8; mem::size_of::<Uuid>() + Vec::<Partition>::SIZE]);
+    assert_eq_size!(
+        Gpt,
+        [u8; mem::size_of::<Uuid>()
+            + Vec::<Partition>::SIZE
+            + mem::size_of::<BlockSize>()
+            + mem::size_of::<Size>()]
+    );
 
     #[cfg(not(feature = "std"))]
     assert_eq_size!(
         Gpt,
-        [u8; mem::size_of::<Uuid>() + ArrayVec::<[Partition; 128]>::SIZE]
+        [u8; mem::size_of::<Uuid>()
+            + ArrayVec::<[Partition; 128]>::SIZE
+            + mem::size_of::<BlockSize>()
+            + mem::size_of::<Size>()]
     );
 
+    /// Should error when the MBR is invalid/missing.
     #[test]
     #[should_panic = "MBR signature invalid"]
     fn missing_mbr_test() {
@@ -598,7 +655,7 @@ mod test_no_std {
     #[test]
     #[should_panic(expected = "Attempted to add overlapping partitions")]
     fn invalid_partitions() {
-        let mut gpt: Gpt = Gpt::new(Uuid::nil());
+        let mut gpt: Gpt = Gpt::new(Uuid::nil(), Size::from_mib(10), BLOCK_SIZE);
         let part = PartitionBuilder::new(Uuid::nil())
             .start(Offset(0))
             .end(Offset(512))
@@ -612,7 +669,18 @@ mod test_no_std {
     #[test]
     #[should_panic(expected = "Invalid Partition Size")]
     fn invalid_partitions_size() {
-        let mut gpt: Gpt = Gpt::new(Uuid::nil());
+        let mut gpt: Gpt = Gpt::new(Uuid::nil(), Size::from_mib(10), BLOCK_SIZE);
+        let part = PartitionBuilder::new(Uuid::nil())
+            .start(Offset(0))
+            .size(Size::from_bytes(0))
+            .partition_type(PartitionType::Unused);
+        gpt.add_partition(part.finish(BLOCK_SIZE)).unwrap();
+    }
+
+    /// A 512 byte partition should be valid
+    #[test]
+    fn valid_one_block_partition() {
+        let mut gpt: Gpt = Gpt::new(Uuid::nil(), Size::from_mib(10), BLOCK_SIZE);
         let part = PartitionBuilder::new(Uuid::nil())
             .start(Offset(0))
             .end(Offset(0))
@@ -707,12 +775,11 @@ mod test {
     fn gpt_roundtrip() -> Result {
         let mut dest = vec![0; TEN_MIB_BYTES];
         let gpt = read_gpt_size::<Vec>(&data()?)?;
-        gpt.to_bytes(&mut dest, BLOCK_SIZE)
-            .map_err(anyhow::Error::msg)?;
+        gpt.to_bytes(&mut dest).map_err(anyhow::Error::msg)?;
         let new_gpt = read_gpt_size::<Vec>(&dest)?;
         assert_eq!(new_gpt, gpt);
         //
-        gpt.to_bytes(&mut dest, BLOCK_SIZE)?;
+        gpt.to_bytes(&mut dest)?;
         let new_gpt = read_gpt_size::<Vec>(&dest)?;
         assert_eq!(new_gpt, gpt);
         Ok(())
@@ -736,7 +803,7 @@ mod test {
         //
         raw.seek(SeekFrom::Start(0))?;
         raw.write_all(&b"\0".repeat(TEN_MIB_BYTES))?;
-        gpt.to_writer(&mut raw, BLOCK_SIZE)?;
+        gpt.to_writer(&mut raw)?;
         let gpt = Gpt::from_reader(&mut raw, BLOCK_SIZE)?;
         expected_gpt(gpt);
         //
@@ -748,9 +815,7 @@ mod test {
     fn other_n_partitions() -> Result {
         let mut raw = data()?;
         let zero_gpt = read_gpt_size::<Array<[Partition; 0]>>(&raw)?;
-        zero_gpt
-            .to_bytes(&mut raw, BLOCK_SIZE)
-            .map_err(anyhow::Error::msg)?;
+        zero_gpt.to_bytes(&mut raw).map_err(anyhow::Error::msg)?;
         let gpt = read_gpt_size::<Vec>(&raw)?;
         assert_eq!(gpt.partitions().len(), 0);
         //
@@ -793,7 +858,11 @@ mod test {
         let test_data = data()?;
         let test_gpt = read_gpt_size::<Vec>(&test_data)?;
         //
-        let mut gpt: Gpt<Vec> = Gpt::new(Uuid::parse_str(CF_DISK_GUID)?);
+        let mut gpt: Gpt<Vec> = Gpt::new(
+            Uuid::parse_str(CF_DISK_GUID)?,
+            Size::from_mib(10),
+            BLOCK_SIZE,
+        );
         let part = PartitionBuilder::new(Uuid::parse_str(CF_PART_GUID)?)
             .start(Size::from_mib(1).into())
             .size(Size::from_mib(8))
@@ -807,8 +876,8 @@ mod test {
     #[test]
     fn empty_partitions() -> Result {
         let mut data = vec![0; TEN_MIB_BYTES];
-        let gpt: Gpt = Gpt::new(Uuid::new_v4());
-        gpt.to_bytes(&mut data, BLOCK_SIZE)?;
+        let gpt: Gpt = Gpt::new(Uuid::new_v4(), Size::from_mib(10), BLOCK_SIZE);
+        gpt.to_bytes(&mut data)?;
         let gpt: Gpt = Gpt::from_bytes(&data, BLOCK_SIZE)?;
         assert_eq!(gpt.partitions().len(), 0);
         //
@@ -822,11 +891,45 @@ mod test {
     fn empty_partitions_std() -> Result {
         let data = vec![0; TEN_MIB_BYTES];
         let mut data = io::Cursor::new(data);
-        let gpt: Gpt = Gpt::new(Uuid::new_v4());
-        gpt.to_writer(&mut data, BLOCK_SIZE)?;
+        let gpt: Gpt = Gpt::new(Uuid::new_v4(), Size::from_mib(10), BLOCK_SIZE);
+        gpt.to_writer(&mut data)?;
         let gpt: Gpt = Gpt::from_reader(&mut data, BLOCK_SIZE)?;
         assert_eq!(gpt.partitions().len(), 0);
         //
+        Ok(())
+    }
+
+    /// Test GptC::remaining is correct
+    // TODO: Is this correct? Maths :(
+    #[test]
+    fn remaining() -> Result {
+        let size = Size::from_bytes(TEN_MIB_BYTES as u64);
+        let mut gpt: Gpt = Gpt::new(Uuid::nil(), Size::from_mib(10), BLOCK_SIZE);
+        let rem = gpt.remaining();
+        let part = PartitionBuilder::new(Uuid::nil())
+            .start(gpt.first_usable())
+            .size(rem)
+            .finish(BLOCK_SIZE);
+        assert_eq!(
+            part.end(),
+            gpt.last_usable(),
+            "Partition didn't use all available space"
+        );
+        // 10 MiB, minus 2 partition arrays, two header blocks, and one MBR.
+        let expected: Size = (size - (Size::from_kib(16) * 2)) - (Size::from_bytes(512) * 3);
+        dbg!(expected);
+        assert_eq!(rem, expected, "Remaining wasn't expected size");
+        //
+        let part = PartitionBuilder::new(Uuid::nil())
+            .start(gpt.first_usable())
+            .size(rem - Size::from_mib(1))
+            .finish(BLOCK_SIZE);
+        gpt.add_partition(part)?;
+        let rem = gpt.remaining();
+        dbg!(rem);
+        dbg!(rem.as_mib());
+        // 1049088 - 1048576
+        assert_eq!(rem, Size::from_mib(1) + Size::from_bytes(512));
         Ok(())
     }
 }
