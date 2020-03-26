@@ -103,7 +103,9 @@ pub struct Partition {
 
     /// Partition name, converted from UTF-16-LE
     ///
-    /// Hard-coded limit of 70 bytes, last two MUST be null
+    /// Hard-coded limit of 70 bytes, last two MUST be null.
+    ///
+    /// Use size of 72 because it has a default impl and 70 doesn't.
     name: ArrayString<[u8; 72]>,
 }
 
