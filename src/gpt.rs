@@ -561,8 +561,7 @@ impl<C: GptHelper<C>> Gpt<C> {
             .into_offset()
     }
 
-    /// Given a `block_size` and `disk_size`,
-    /// return how much space is remaining for a partition using this `Gpt`.
+    /// Return how much space is remaining for a partition using this `Gpt`.
     pub fn remaining(&self) -> Size {
         let (first, last) = Header::usable(self.block_size, self.disk_size);
         let max = self
