@@ -91,7 +91,7 @@ impl ProtectiveMbr {
         // Safe because ProtectiveMbr is simple and repr(C, packed),
         // any value is valid, and we check the size of `source` above.
         let mbr = unsafe { (source.as_ptr() as *const ProtectiveMbr).read_unaligned() };
-        let mbr = mbr.validate()?;
+        mbr.validate()?;
         Ok(mbr)
     }
 
@@ -123,7 +123,7 @@ impl ProtectiveMbr {
     /// - The signature is not correct
     /// - The GPT Protective partition is missing
     /// - If other partitions exist. In this case the error is [`Error::NotGpt`]
-    fn validate(self) -> Result<Self> {
+    fn validate(&self) -> Result<()> {
         if self.signature != 0xAA55 {
             return Err(Error::Invalid("MBR signature invalid. Expected 0xAA55"));
         }
@@ -138,7 +138,7 @@ impl ProtectiveMbr {
                 return Err(Error::Invalid("Protective MBR has other partitions"));
             }
         }
-        Ok(self)
+        Ok(())
     }
 }
 
