@@ -171,6 +171,9 @@ pub struct Header {
 
     /// CRC32 of the partition array
     pub partitions_crc32: u32,
+
+    /// Partition Entry Size
+    pub entry_size: u32,
 }
 
 impl Header {
@@ -211,6 +214,7 @@ impl Header {
                 HeaderKind::Backup => last_usable + 1,
             },
             partitions_crc32,
+            entry_size: PARTITION_ENTRY_SIZE,
         }
     }
 
@@ -259,6 +263,7 @@ impl Header {
             partitions: raw.partitions,
             array: Block::new(raw.partition_array_start, block_size),
             partitions_crc32: raw.partitions_crc32,
+            entry_size: raw.partition_size,
         };
         Ok(header)
     }

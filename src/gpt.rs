@@ -42,6 +42,7 @@ fn validate<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8]) -
         &mut func,
         primary.partitions as u64,
         primary.array.into_offset(),
+        primary.entry_size as usize,
         &mut cb,
     )?;
     if crc != primary.partitions_crc32 {
@@ -62,6 +63,7 @@ fn validate<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8]) -
         &mut func,
         alt.partitions as u64,
         alt.array.into_offset(),
+        alt.entry_size as usize,
         &mut |_, _| Ok(()),
     )?;
     if crc != alt.partitions_crc32 {

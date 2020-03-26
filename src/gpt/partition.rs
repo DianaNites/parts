@@ -14,7 +14,7 @@ use core::{
 use crc::{crc32, Hasher32};
 use uuid::Uuid;
 
-/// Calculate partition crc32
+/// Calculate partition crc32.
 ///
 /// See [`super::Gpt::from_bytes`] for details.
 ///
@@ -26,6 +26,7 @@ pub fn calculate_part_crc<F, CB>(
     func: &mut F,
     partitions: u64,
     array_start: Offset,
+    entry_size: usize,
     cb: &mut CB,
 ) -> Result<u32>
 where
@@ -35,7 +36,7 @@ where
     let mut digest = crc32::Digest::new(crc32::IEEE);
     let mut buf = [0; PARTITION_ENTRY_SIZE as usize];
     for i in 0..partitions {
-        let b = Offset(array_start.0 + ((PARTITION_ENTRY_SIZE as u64) * i));
+        let b = Offset(array_start.0 + ((entry_size as u64) * i));
         func(b, &mut buf)?;
         cb(i as usize, &buf)?;
         digest.write(&buf);
