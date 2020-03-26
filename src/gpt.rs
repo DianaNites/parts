@@ -618,6 +618,8 @@ mod test_no_std {
 
     // FIXME: should be from crate::util
     const BLOCK_SIZE: BlockSize = BlockSize(512);
+    const TEN_MIB_BYTES: usize = 10_485_760;
+    type Result = super::Result<()>;
 
     type DefArray = ArrayVec<[Partition; 128]>;
 
@@ -701,6 +703,50 @@ mod test_no_std {
         } else {
             panic!("Empty disk was allowed");
         }
+    }
+
+    /// Test GptC::remaining is correct
+    #[test]
+    fn remaining() -> Result {
+        let size = Size::from_bytes(TEN_MIB_BYTES as u64);
+        let mut gpt: Gpt = Gpt::new(Uuid::nil(), Size::from_mib(10), BLOCK_SIZE);
+        let rem = gpt.remaining();
+        let part = PartitionBuilder::new(Uuid::nil())
+            .start(gpt.first_usable())
+            .size(rem)
+            .finish(BLOCK_SIZE);
+        assert_eq!(
+            part.end(),
+            gpt.last_usable(),
+            "Partition didn't use all available space"
+        );
+        // 10 MiB, minus 2 partition arrays, two header blocks, and one MBR.
+        let expected: Size = (size - (Size::from_kib(16) * 2)) - (Size::from_bytes(512) * 3);
+        dbg!(expected);
+        assert_eq!(rem, expected, "Remaining wasn't expected size");
+        //
+        let part = PartitionBuilder::new(Uuid::nil())
+            .start(gpt.first_usable())
+            .size(rem - Size::from_mib(1))
+            .finish(BLOCK_SIZE);
+        gpt.add_partition(part)?;
+        let rem = gpt.remaining();
+        dbg!(rem);
+        dbg!(rem.as_mib());
+        assert_eq!(rem, Size::from_mib(1) + Size::from_bytes(512));
+        Ok(())
+    }
+
+    /// Test that a newly created Gpt has no partitions
+    #[test]
+    fn empty_partitions() -> Result {
+        let mut data = vec![0; 1024 * 1024];
+        let gpt: Gpt = Gpt::new(Uuid::nil(), Size::from_mib(10), BLOCK_SIZE);
+        gpt.to_bytes(&mut data)?;
+        let gpt: Gpt = Gpt::from_bytes(&data, BLOCK_SIZE)?;
+        assert_eq!(gpt.partitions().len(), 0);
+        //
+        Ok(())
     }
 }
 
@@ -869,18 +915,6 @@ mod test {
     }
 
     /// Test that a newly created Gpt has no partitions
-    #[test]
-    fn empty_partitions() -> Result {
-        let mut data = vec![0; TEN_MIB_BYTES];
-        let gpt: Gpt = Gpt::new(Uuid::new_v4(), Size::from_mib(10), BLOCK_SIZE);
-        gpt.to_bytes(&mut data)?;
-        let gpt: Gpt = Gpt::from_bytes(&data, BLOCK_SIZE)?;
-        assert_eq!(gpt.partitions().len(), 0);
-        //
-        Ok(())
-    }
-
-    /// Test that a newly created Gpt has no partitions
     ///
     /// This *actually* tests that from_reader works
     #[test]
@@ -892,38 +926,6 @@ mod test {
         let gpt: Gpt = Gpt::from_reader(&mut data, BLOCK_SIZE)?;
         assert_eq!(gpt.partitions().len(), 0);
         //
-        Ok(())
-    }
-
-    /// Test GptC::remaining is correct
-    #[test]
-    fn remaining() -> Result {
-        let size = Size::from_bytes(TEN_MIB_BYTES as u64);
-        let mut gpt: Gpt = Gpt::new(Uuid::nil(), Size::from_mib(10), BLOCK_SIZE);
-        let rem = gpt.remaining();
-        let part = PartitionBuilder::new(Uuid::nil())
-            .start(gpt.first_usable())
-            .size(rem)
-            .finish(BLOCK_SIZE);
-        assert_eq!(
-            part.end(),
-            gpt.last_usable(),
-            "Partition didn't use all available space"
-        );
-        // 10 MiB, minus 2 partition arrays, two header blocks, and one MBR.
-        let expected: Size = (size - (Size::from_kib(16) * 2)) - (Size::from_bytes(512) * 3);
-        dbg!(expected);
-        assert_eq!(rem, expected, "Remaining wasn't expected size");
-        //
-        let part = PartitionBuilder::new(Uuid::nil())
-            .start(gpt.first_usable())
-            .size(rem - Size::from_mib(1))
-            .finish(BLOCK_SIZE);
-        gpt.add_partition(part)?;
-        let rem = gpt.remaining();
-        dbg!(rem);
-        dbg!(rem.as_mib());
-        assert_eq!(rem, Size::from_mib(1) + Size::from_bytes(512));
         Ok(())
     }
 }
