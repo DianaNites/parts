@@ -314,7 +314,7 @@ impl PartitionBuilder {
                         .expect("Invalid Partition Size"),
                 )
             }
-            End::None => panic!("Invalid Partition Creation"),
+            End::None => panic!("Invalid Partition Creation: Missing size"),
         };
         let mut end = end;
         // Round up
@@ -348,6 +348,7 @@ mod tests {
 
     assert_eq_size!(RawPartition, [u8; PARTITION_ENTRY_SIZE as usize]);
 
+    /// Skip the MBR and GPT, first partition.
     const OFFSET: usize = (BLOCK_SIZE.0 * 2) as usize;
 
     #[test]
@@ -362,13 +363,37 @@ mod tests {
     #[test]
     fn part_roundtrip() -> Result {
         let raw = data_parted()?;
-        // Skip MBR and GPT header, first partition is there.
         let raw = &raw[OFFSET..];
         let part = Partition::from_bytes(raw, BLOCK_SIZE)?;
         assert_eq!("Test", part.name());
         let mut new_raw = [0; PARTITION_ENTRY_SIZE as usize];
         part.to_bytes(&mut new_raw, BLOCK_SIZE)?;
         assert_eq!(&new_raw[..], &raw[..PARTITION_ENTRY_SIZE as usize]);
+        Ok(())
+    }
+
+    #[test]
+    fn create_part() -> Result {
+        let raw = data()?;
+        let raw_part = &raw[OFFSET..][..PARTITION_ENTRY_SIZE as usize];
+        let part = PartitionBuilder::new(Uuid::parse_str(CF_PART_GUID)?)
+            .start(Size::from_mib(1).into())
+            .size(Size::from_mib(8))
+            .partition_type(PartitionType::LinuxFilesystemData)
+            .finish(BLOCK_SIZE);
+        let mut buf = [0; PARTITION_ENTRY_SIZE as usize];
+        part.to_bytes(&mut buf, BLOCK_SIZE)?;
+        //
+        let new = Partition::from_bytes(&buf, BLOCK_SIZE)?;
+        let old = Partition::from_bytes(&raw_part, BLOCK_SIZE)?;
+        dbg!(new);
+        dbg!(old);
+        //
+        assert_eq!(new.start(), old.start());
+        assert_eq!(new.end(), old.end());
+        assert_eq!(buf.len(), raw_part.len());
+        assert_eq!(&buf[..], raw_part);
+        //
         Ok(())
     }
 
