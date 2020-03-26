@@ -527,7 +527,6 @@ impl<C: GptHelper<C>> Gpt<C> {
     }
 
     /// Remove the partition at `index`.
-    // FIXME: Where is the index supposed to come from, exactly?
     pub fn remove_partition(&mut self, index: usize) -> Partition {
         self.partitions.remove(index)
     }
