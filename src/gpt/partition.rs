@@ -306,7 +306,7 @@ impl PartitionBuilder {
     /// - If not all required methods were called.
     /// - If the size is not at least `block_size`
     pub fn finish(self, block_size: BlockSize) -> Partition {
-        let end = match self.end {
+        let mut end = match self.end {
             End::Abs(end) => end,
             End::Rel(end) => {
                 // Minus block because last is inclusive.
@@ -318,7 +318,6 @@ impl PartitionBuilder {
             }
             End::None => panic!("Invalid Partition Creation: Missing size"),
         };
-        let mut end = end;
         // Round up
         let e = end.0 % block_size.0;
         if e != 0 {
