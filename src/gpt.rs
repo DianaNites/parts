@@ -522,7 +522,9 @@ impl<C: GptHelper<C>> Gpt<C> {
     pub fn add_partition(&mut self, part: Partition) -> Result<()> {
         self.check_overlap(&part)?;
         self.partitions.push(part)?;
-        self.partitions_mut().sort_unstable_by_key(|p| p.start());
+        self.partitions
+            .as_mut_slice()
+            .sort_unstable_by_key(|p| p.start());
         Ok(())
     }
 
