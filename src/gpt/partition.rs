@@ -241,7 +241,7 @@ pub struct PartitionBuilder {
     end: End,
     partition_type: PartitionType,
     uuid: Uuid,
-    name: [u8; 72],
+    name: ArrayString<[u8; 72]>,
 }
 
 impl PartitionBuilder {
@@ -254,7 +254,7 @@ impl PartitionBuilder {
             end: Default::default(),
             partition_type: Default::default(),
             uuid,
-            name: [0; 72],
+            name: Default::default(),
         }
     }
 
@@ -295,7 +295,8 @@ impl PartitionBuilder {
     /// - If name is more than 70 bytes.
     pub fn name(mut self, name: &str) -> Self {
         assert!(name.len() <= 70);
-        self.name[..name.len()].copy_from_slice(name.as_bytes());
+        self.name.clear();
+        self.name.push_str(name);
         self
     }
 
@@ -321,23 +322,15 @@ impl PartitionBuilder {
         // Round up
         let e = end.0 % block_size.0;
         if e != 0 {
-            // TODO: Panic instead?
             end = Offset(end.0 + (block_size.0 - e));
         }
-        // Unwrap is okay because from str, always valid utf-8
-        let mut name = ArrayString::from_byte_string(&self.name).unwrap();
-        // Need to remove null bytes
-        name.truncate(core::cmp::min(
-            self.name.iter().filter(|c| **c != b'\0').count(),
-            70,
-        ));
         Partition {
             partition_type: self.partition_type,
             guid: self.uuid,
             start: self.start,
             end,
             attributes: 0,
-            name,
+            name: self.name,
         }
     }
 }
