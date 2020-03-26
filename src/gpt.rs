@@ -513,11 +513,6 @@ impl<C: GptHelper<C>> Gpt<C> {
         self.partitions.as_slice()
     }
 
-    /// Mutable slice of in-use partitions. Sorted by starting offset.
-    pub fn partitions_mut(&mut self) -> &mut [Partition] {
-        self.partitions.as_mut_slice()
-    }
-
     /// Add a partition.
     ///
     /// # Errors
