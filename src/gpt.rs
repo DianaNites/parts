@@ -570,8 +570,7 @@ impl<C: GptHelper<C>> Gpt<C> {
             .max_by_key(|x| x.start())
             .map(|x| x.end() / self.block_size)
             .unwrap_or(first);
-        // Plus 1 because inclusive?
-        // TODO: Is this correct? Maths :(
+        // Plus 1 block because inclusive.
         ((last - max.into()) + 1).into_offset().into()
     }
 }
@@ -899,7 +898,6 @@ mod test {
     }
 
     /// Test GptC::remaining is correct
-    // TODO: Is this correct? Maths :(
     #[test]
     fn remaining() -> Result {
         let size = Size::from_bytes(TEN_MIB_BYTES as u64);
