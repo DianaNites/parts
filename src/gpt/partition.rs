@@ -22,15 +22,16 @@ use uuid::Uuid;
 /// PARTITION_ENTRY_SIZE bytes
 ///
 /// `CB` also receives the partition number, starting at zero.
-pub fn calculate_part_crc<
-    F: FnMut(Offset, &mut [u8]) -> Result<()>,
-    CB: FnMut(usize, &[u8]) -> Result<()>,
->(
+pub fn calculate_part_crc<F, CB>(
     func: &mut F,
     partitions: u64,
     array_start: Offset,
     cb: &mut CB,
-) -> Result<u32> {
+) -> Result<u32>
+where
+    F: FnMut(Offset, &mut [u8]) -> Result<()>,
+    CB: FnMut(usize, &[u8]) -> Result<()>,
+{
     let mut digest = crc32::Digest::new(crc32::IEEE);
     let mut buf = [0; PARTITION_ENTRY_SIZE as usize];
     for i in 0..partitions {
