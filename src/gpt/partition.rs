@@ -323,6 +323,7 @@ impl PartitionBuilder {
             // TODO: Panic instead?
             end = Offset(end.0 + (block_size.0 - e));
         }
+        // Unwrap is okay because from str, always valid utf-8
         let mut name = ArrayString::from_byte_string(&self.name).unwrap();
         // Need to remove null bytes
         name.truncate(core::cmp::min(
