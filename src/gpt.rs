@@ -188,7 +188,7 @@ impl GptHelper<Vec<Partition>> for Vec<Partition> {
 /// use parts::{arrayvec::ArrayVec, GptC, Partition, uuid::Uuid, types::*};
 ///
 /// let gpt: GptC<ArrayVec<[Partition; 4]>> = GptC::new(
-///     Uuid::new_v4(),
+///     Uuid::nil(),
 ///     Size::from_mib(10),
 ///     BlockSize(512)
 /// );
@@ -308,7 +308,7 @@ impl<C: GptHelper<C>> Gpt<C> {
     ///     },
     ///     BlockSize(512),
     ///     Size::from_mib(10)
-    /// )?;
+    /// ).unwrap();
     /// # Ok(()) }
     /// ```
     pub fn from_bytes_with_func<F: FnMut(Offset, &mut [u8]) -> Result<()>>(
@@ -605,7 +605,9 @@ impl<C: GptHelper<C>> GptC<C> {
     }
 }
 
-/// Tests that should work without std
+/// Tests that should work without the std feature.
+///
+/// Still requires std exist, since test itself requires it.
 #[cfg(test)]
 mod test_no_std {
     use super::*;

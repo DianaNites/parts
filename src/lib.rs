@@ -33,7 +33,7 @@
 #![cfg_attr(feature = "nightly", feature(external_doc))]
 #![deny(missing_docs)]
 
-#[cfg(test)]
+#[cfg(all(test, feature = "std"))]
 mod util;
 
 mod gpt;
