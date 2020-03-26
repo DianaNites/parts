@@ -925,7 +925,6 @@ mod test {
         let rem = gpt.remaining();
         dbg!(rem);
         dbg!(rem.as_mib());
-        // 1049088 - 1048576
         assert_eq!(rem, Size::from_mib(1) + Size::from_bytes(512));
         Ok(())
     }
