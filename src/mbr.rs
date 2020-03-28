@@ -125,7 +125,7 @@ impl ProtectiveMbr {
     /// - If other partitions exist. In this case the error is [`Error::NotGpt`]
     fn validate(&self) -> Result<()> {
         if self.signature != 0xAA55 {
-            return Err(Error::Invalid("MBR signature invalid. Expected 0xAA55"));
+            return Err(Error::Invalid("MBR signature invalid"));
         }
         let part: MbrPart = self.partitions[0];
         if part.os_type != 0xEE {
