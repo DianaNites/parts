@@ -195,7 +195,9 @@ impl ops::Div<BlockSize> for Size {
 }
 
 /// Represents a Logical Block Address
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Display)]
+///
+/// One Block is [`BlockSize`] bytes.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Display, Default)]
 #[cfg_attr(
     feature = "serde",
     derive(Serialize, Deserialize),
