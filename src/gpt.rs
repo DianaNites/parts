@@ -35,13 +35,13 @@ fn validate<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8]) -
     disk_size: Size,
     mut cb: CB,
 ) -> Result<()> {
-    if primary.this != Block::new(1, block_size) {
+    if primary.this != Block(1) {
         return Err(Error::Invalid("Primary header location invalid"));
     }
     let crc = calculate_part_crc(
         &mut func,
         primary.partitions as u64,
-        primary.array.into_offset(),
+        primary.array * block_size,
         primary.entry_size as usize,
         &mut cb,
     )?;
@@ -56,13 +56,13 @@ fn validate<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8]) -
     if alt.this != last_lba {
         return Err(Error::Invalid("Corrupt Backup GPT Header"));
     }
-    if alt.alt != Block::new(1, block_size) {
+    if alt.alt != Block(1) {
         return Err(Error::Invalid("Corrupt Backup GPT Header"));
     }
     let crc = calculate_part_crc(
         &mut func,
         alt.partitions as u64,
-        alt.array.into_offset(),
+        alt.array * block_size,
         alt.entry_size as usize,
         &mut |_, _| Ok(()),
     )?;
@@ -366,7 +366,7 @@ impl<C: GptHelper<C>> Gpt<C> {
         let mut alt = vec![0; block_size.0 as usize];
         source.seek(SeekFrom::Start(0))?;
         source.read_exact(&mut primary)?;
-        source.seek(SeekFrom::Start(last_lba.into_offset().0))?;
+        source.seek(SeekFrom::Start((last_lba * block_size).0))?;
         source.read_exact(&mut alt)?;
         let gpt = GptC::from_bytes_with_func(
             &primary,
@@ -478,7 +478,7 @@ impl<C: GptHelper<C>> Gpt<C> {
             block_size,
             disk_size,
         );
-        self.write_header_array(func, primary, Block::new(1, block_size), block_size)?;
+        self.write_header_array(func, primary, Block(1), block_size)?;
         Ok(())
     }
 
@@ -546,17 +546,13 @@ impl<C: GptHelper<C>> Gpt<C> {
     /// Given a `block_size` and `disk_size`,
     /// return the first usable partition offset
     pub fn first_usable(&self) -> Offset {
-        Header::usable(self.block_size, self.disk_size)
-            .0
-            .into_offset()
+        Header::usable(self.block_size, self.disk_size).0 * self.block_size
     }
 
     /// Given a `block_size` and `disk_size`,
     /// return the last usable partition offset
     pub fn last_usable(&self) -> Offset {
-        Header::usable(self.block_size, self.disk_size)
-            .1
-            .into_offset()
+        Header::usable(self.block_size, self.disk_size).1 * self.block_size
     }
 
     /// Return how much space is remaining for a partition using this `Gpt`.
@@ -569,7 +565,7 @@ impl<C: GptHelper<C>> Gpt<C> {
             .map(|x| x.end() / self.block_size)
             .unwrap_or(first);
         // Plus 1 block because inclusive.
-        ((last - max.into()) + 1).into_offset().into()
+        (((last - max.0) + 1) * self.block_size).into()
     }
 }
 
@@ -595,11 +591,11 @@ impl<C: GptHelper<C>> GptC<C> {
         let mut partition_buf = [0; PARTITION_ENTRY_SIZE as usize];
         //
         header.to_bytes(&mut header_buf)?;
-        func(last_lba.into_offset(), &header_buf)?;
+        func(last_lba * block_size, &header_buf)?;
         for (i, part) in self.partitions.as_slice().iter().enumerate() {
             part.to_bytes(&mut partition_buf, block_size)?;
             let b =
-                Offset(header.array.into_offset().0 + ((PARTITION_ENTRY_SIZE as u64) * i as u64));
+                Offset((header.array * block_size).0 + ((PARTITION_ENTRY_SIZE as u64) * i as u64));
             func(b, &partition_buf)?;
         }
         //

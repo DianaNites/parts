@@ -193,16 +193,16 @@ impl Header {
     ) -> Self {
         let (first_usable, last_usable) = Header::usable(block_size, disk_size);
         // Account for array
-        let alt = last_usable + 1 + (MIN_PARTITIONS_BYTES / block_size).into();
+        let alt = last_usable + 1 + (MIN_PARTITIONS_BYTES / block_size).0;
         //
         Self {
             this: match kind {
-                HeaderKind::Primary => Block::new(1, block_size),
+                HeaderKind::Primary => Block(1),
                 HeaderKind::Backup => alt,
             },
             alt: match kind {
                 HeaderKind::Primary => alt,
-                HeaderKind::Backup => Block::new(1, block_size),
+                HeaderKind::Backup => Block(1),
             },
             first_usable,
             last_usable,
@@ -210,7 +210,7 @@ impl Header {
             partitions,
             //
             array: match kind {
-                HeaderKind::Primary => Block::new(2, block_size),
+                HeaderKind::Primary => Block(2),
                 HeaderKind::Backup => last_usable + 1,
             },
             partitions_crc32,
@@ -222,7 +222,7 @@ impl Header {
     pub fn usable(block_size: BlockSize, disk_size: Size) -> (Block, Block) {
         let array_end: Block = MIN_PARTITIONS_BYTES / block_size;
         let last: Block = (disk_size / block_size) - 1;
-        ((array_end + 2), (last - array_end.into() - 1))
+        ((array_end + 2), (last - array_end.0 - 1))
     }
 }
 
@@ -255,13 +255,13 @@ impl Header {
             return Err(Error::Invalid("CRC mismatch"));
         }
         let header = Header {
-            this: Block::new(raw.this_lba, block_size),
-            alt: Block::new(raw.alt_lba, block_size),
-            first_usable: Block::new(raw.first_usable_lba, block_size),
-            last_usable: Block::new(raw.last_usable_lba, block_size),
+            this: Block(raw.this_lba),
+            alt: Block(raw.alt_lba),
+            first_usable: Block(raw.first_usable_lba),
+            last_usable: Block(raw.last_usable_lba),
             uuid: uuid_hack(raw.disk_guid),
             partitions: raw.partitions,
-            array: Block::new(raw.partition_array_start, block_size),
+            array: Block(raw.partition_array_start),
             partitions_crc32: raw.partitions_crc32,
             entry_size: raw.partition_size,
         };
@@ -275,12 +275,12 @@ impl Header {
     /// - [`Error::NotEnough`] if `dest` can't fit the header.
     pub fn to_bytes(&self, dest: &mut [u8]) -> Result<()> {
         let mut raw = RawHeader::default();
-        raw.this_lba = self.this.into();
-        raw.alt_lba = self.alt.into();
-        raw.first_usable_lba = self.first_usable.into();
-        raw.last_usable_lba = self.last_usable.into();
+        raw.this_lba = self.this.0;
+        raw.alt_lba = self.alt.0;
+        raw.first_usable_lba = self.first_usable.0;
+        raw.last_usable_lba = self.last_usable.0;
         raw.disk_guid = *uuid_hack(*self.uuid.as_bytes()).as_bytes();
-        raw.partition_array_start = self.array.into();
+        raw.partition_array_start = self.array.0;
         raw.partitions = self.partitions;
         // No need to calculate or be passed it, should be set when `self` is created.
         raw.partitions_crc32 = self.partitions_crc32;
@@ -345,8 +345,8 @@ mod tests {
             Size::from_bytes(TEN_MIB_BYTES as u64),
         );
         // CFDisk always uses 2048/1MiB as the first usable block
-        my_primary.first_usable = Block::new(2048, BLOCK_SIZE);
-        my_backup.first_usable = Block::new(2048, BLOCK_SIZE);
+        my_primary.first_usable = Block(2048);
+        my_backup.first_usable = Block(2048);
         //
         let mut raw_my_primary = [0u8; BLOCK_SIZE.0 as usize];
         let mut raw_my_backup = [0u8; BLOCK_SIZE.0 as usize];

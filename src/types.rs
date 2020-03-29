@@ -84,7 +84,7 @@ impl ops::Div<BlockSize> for Offset {
 
     fn div(self, rhs: BlockSize) -> Self::Output {
         let block = self.0 / rhs.0;
-        Block::new(block, rhs)
+        Block(block)
     }
 }
 
@@ -190,7 +190,7 @@ impl ops::Div<BlockSize> for Size {
 
     fn div(self, rhs: BlockSize) -> Self::Output {
         let block = self.0 / rhs.0;
-        Block::new(block, rhs)
+        Block(block)
     }
 }
 
@@ -199,26 +199,17 @@ impl ops::Div<BlockSize> for Size {
 #[cfg_attr(
     feature = "serde",
     derive(Serialize, Deserialize),
-    serde(crate = "serde_crate")
+    serde(crate = "serde_crate", transparent)
 )]
-#[display(fmt = "Block {}", block)]
-pub struct Block {
-    block: u64,
-    size: BlockSize,
-}
+#[display(fmt = "Block {}", _0)]
+#[repr(transparent)]
+pub struct Block(pub u64);
 
-impl Block {
-    /// Create a new Block
-    pub fn new(block: u64, block_size: BlockSize) -> Self {
-        Self {
-            block,
-            size: block_size,
-        }
-    }
+impl ops::Mul<BlockSize> for Block {
+    type Output = Offset;
 
-    /// Get the [`Offset`] representing this Block
-    pub fn into_offset(self) -> Offset {
-        Offset(self.block * self.size.0)
+    fn mul(self, rhs: BlockSize) -> Self::Output {
+        Offset(self.0 * rhs.0)
     }
 }
 
@@ -226,16 +217,13 @@ impl ops::Add<u64> for Block {
     type Output = Block;
 
     fn add(self, rhs: u64) -> Self::Output {
-        Self {
-            block: self.block + rhs,
-            size: self.size,
-        }
+        Self(self.0 + rhs)
     }
 }
 
 impl ops::AddAssign<u64> for Block {
     fn add_assign(&mut self, rhs: u64) {
-        self.block += rhs;
+        self.0 += rhs;
     }
 }
 
@@ -243,22 +231,12 @@ impl ops::Sub<u64> for Block {
     type Output = Block;
 
     fn sub(self, rhs: u64) -> Self::Output {
-        Self {
-            block: self.block - rhs,
-            size: self.size,
-        }
+        Self(self.0 - rhs)
     }
 }
 
 impl ops::SubAssign<u64> for Block {
     fn sub_assign(&mut self, rhs: u64) {
-        self.block -= rhs;
-    }
-}
-
-/// The logical block
-impl From<Block> for u64 {
-    fn from(b: Block) -> Self {
-        b.block
+        self.0 -= rhs;
     }
 }

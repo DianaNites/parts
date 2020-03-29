@@ -148,8 +148,8 @@ impl Partition {
         Ok(Partition {
             partition_type: PartitionType::from_uuid(uuid_hack(part.partition_type_guid)),
             guid: uuid_hack(part.partition_guid),
-            start: Block::new(part.starting_lba, block_size).into_offset(),
-            end: Block::new(part.ending_lba, block_size).into_offset(),
+            start: Block(part.starting_lba) * block_size,
+            end: Block(part.ending_lba) * block_size,
             attributes: part.attributes,
             name,
         })
@@ -164,8 +164,8 @@ impl Partition {
         let mut raw = RawPartition::default();
         raw.partition_type_guid = *uuid_hack(*self.partition_type.to_uuid().as_bytes()).as_bytes();
         raw.partition_guid = *uuid_hack(*self.guid.as_bytes()).as_bytes();
-        raw.starting_lba = (self.start / block_size).into();
-        raw.ending_lba = (self.end / block_size).into();
+        raw.starting_lba = (self.start / block_size).0;
+        raw.ending_lba = (self.end / block_size).0;
         raw.attributes = self.attributes;
         self.name()
             .encode_utf16()
