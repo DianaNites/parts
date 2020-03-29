@@ -337,7 +337,7 @@ impl<C: GptHelper<C>> Gpt<C> {
             block_size,
             disk_size,
             |_, source| {
-                let part = Partition::from_bytes(source, block_size)?;
+                let part = Partition::from_bytes(source)?;
                 if part != Partition::new() {
                     let _ = partitions.push(part);
                 }
@@ -449,7 +449,7 @@ impl<C: GptHelper<C>> Gpt<C> {
         let mut digest = crc32::Digest::new(crc32::IEEE);
         // FIXME: Invalid for N lower than 128?
         for part in self.partitions.as_slice() {
-            part.to_bytes(&mut partition_buf, block_size)?;
+            part.to_bytes(&mut partition_buf)?;
             digest.write(&partition_buf);
         }
         let parts_crc = digest.sum32();
@@ -465,8 +465,8 @@ impl<C: GptHelper<C>> Gpt<C> {
         );
         // Verify all partitions are within bounds
         for part in self.partitions() {
-            let a = part.start() / block_size;
-            let b = part.end() / block_size;
+            let a = part.start();
+            let b = part.end();
             if (a < alt.first_usable) || (b > alt.last_usable) {
                 return Err(Error::NotEnough);
             }
@@ -547,26 +547,24 @@ impl<C: GptHelper<C>> Gpt<C> {
         self.uuid = uuid;
     }
 
-    /// Given a `block_size` and `disk_size`,
-    /// return the first usable partition offset
-    pub fn first_usable(&self) -> Offset {
-        Header::usable(self.block_size, self.disk_size).0 * self.block_size
+    /// The first usable partition [`Block`]
+    pub fn first_usable(&self) -> Block {
+        Header::usable(self.block_size, self.disk_size).0
     }
 
-    /// Given a `block_size` and `disk_size`,
-    /// return the last usable partition offset
-    pub fn last_usable(&self) -> Offset {
-        Header::usable(self.block_size, self.disk_size).1 * self.block_size
+    /// The last usable partition [`Block`]
+    pub fn last_usable(&self) -> Block {
+        Header::usable(self.block_size, self.disk_size).1
     }
 
     /// Return how much space is remaining for a partition using this `Gpt`.
     pub fn remaining(&self) -> Size {
-        let (first, last) = Header::usable(self.block_size, self.disk_size);
+        let (first, last) = (self.first_usable(), self.last_usable());
         let max = self
             .partitions()
             .iter()
             .max_by_key(|x| x.start())
-            .map(|x| x.end() / self.block_size)
+            .map(|x| x.end())
             .unwrap_or(first);
         // Plus 1 block because inclusive.
         (((last - max.0) + 1) * self.block_size).into()
@@ -597,7 +595,7 @@ impl<C: GptHelper<C>> GptC<C> {
         header.to_bytes(&mut header_buf)?;
         func(last_lba * block_size, &header_buf)?;
         for (i, part) in self.partitions.as_slice().iter().enumerate() {
-            part.to_bytes(&mut partition_buf, block_size)?;
+            part.to_bytes(&mut partition_buf)?;
             let b =
                 Offset((header.array * block_size).0 + ((PARTITION_ENTRY_SIZE as u64) * i as u64));
             func(b, &partition_buf)?;
@@ -615,6 +613,7 @@ mod test_no_std {
     use super::*;
     use crate::PartitionType;
     use core::mem;
+    use pretty_assertions::assert_eq;
     use static_assertions::*;
     use uuid::Uuid;
 
@@ -657,8 +656,8 @@ mod test_no_std {
     fn invalid_partitions() {
         let mut gpt: Gpt = Gpt::new(Uuid::nil(), Size::from_mib(10), BLOCK_SIZE);
         let part = PartitionBuilder::new(Uuid::nil())
-            .start(Offset(0))
-            .end(Offset(512))
+            .start(gpt.first_usable())
+            .end(gpt.first_usable() + 1)
             .partition_type(PartitionType::Unused);
         gpt.add_partition(part.finish(BLOCK_SIZE)).unwrap();
         let e = gpt.add_partition(part.finish(BLOCK_SIZE)).unwrap_err();
@@ -671,7 +670,7 @@ mod test_no_std {
     fn invalid_partitions_size() {
         let mut gpt: Gpt = Gpt::new(Uuid::nil(), Size::from_mib(10), BLOCK_SIZE);
         let part = PartitionBuilder::new(Uuid::nil())
-            .start(Offset(0))
+            .start(Block(0))
             .size(Size::from_bytes(0))
             .partition_type(PartitionType::Unused);
         gpt.add_partition(part.finish(BLOCK_SIZE)).unwrap();
@@ -682,8 +681,8 @@ mod test_no_std {
     fn valid_one_block_partition() {
         let mut gpt: Gpt = Gpt::new(Uuid::nil(), Size::from_mib(10), BLOCK_SIZE);
         let part = PartitionBuilder::new(Uuid::nil())
-            .start(Offset(0))
-            .end(Offset(0))
+            .start(gpt.first_usable())
+            .end(gpt.first_usable())
             .partition_type(PartitionType::Unused);
         gpt.add_partition(part.finish(BLOCK_SIZE)).unwrap();
     }
@@ -759,6 +758,7 @@ mod test {
         partitions::PartitionType,
         util::{Result, *},
     };
+    use pretty_assertions::assert_eq;
     use std::{io, vec::Vec as StdVec};
 
     type Array<N> = ArrayVec<N>;
@@ -908,7 +908,8 @@ mod test {
             BLOCK_SIZE,
         );
         let part = PartitionBuilder::new(Uuid::parse_str(CF_PART_GUID)?)
-            .start(Size::from_mib(1).into())
+            // FIXME: Shouldn't have to use BLOCK_SIZE here
+            .start(Size::from_mib(1) / BLOCK_SIZE)
             .size(Size::from_mib(8))
             .partition_type(PartitionType::LinuxFilesystemData);
         gpt.add_partition(part.finish(BLOCK_SIZE))?;

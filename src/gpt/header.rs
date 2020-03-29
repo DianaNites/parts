@@ -301,6 +301,7 @@ impl Header {
 mod tests {
     use super::*;
     use crate::util::{Result, *};
+    use pretty_assertions::assert_eq;
     use static_assertions::*;
 
     assert_eq_size!(RawHeader, [u8; HEADER_SIZE as usize]);

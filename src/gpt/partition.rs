@@ -94,10 +94,10 @@ pub struct Partition {
     guid: Uuid,
 
     /// Where it starts on disk
-    start: Offset,
+    start: Block,
 
     /// Where it ends on disk
-    end: Offset,
+    end: Block,
 
     /// Attributes
     // TODO: Bitflags
@@ -130,7 +130,7 @@ impl Partition {
     /// # Errors
     ///
     /// - [`Error::NotEnough`] if `source` is too small
-    pub(crate) fn from_bytes(source: &[u8], block_size: BlockSize) -> Result<Self> {
+    pub(crate) fn from_bytes(source: &[u8]) -> Result<Self> {
         #[allow(clippy::cast_ptr_alignment)]
         let part = unsafe {
             if source.len() < mem::size_of::<RawPartition>() {
@@ -148,8 +148,8 @@ impl Partition {
         Ok(Partition {
             partition_type: PartitionType::from_uuid(uuid_hack(part.partition_type_guid)),
             guid: uuid_hack(part.partition_guid),
-            start: Block(part.starting_lba) * block_size,
-            end: Block(part.ending_lba) * block_size,
+            start: Block(part.starting_lba),
+            end: Block(part.ending_lba),
             attributes: part.attributes,
             name,
         })
@@ -160,12 +160,12 @@ impl Partition {
     /// # Errors
     ///
     /// - [`Error::NotEnough`] if `dest` is too small.
-    pub(crate) fn to_bytes(&self, dest: &mut [u8], block_size: BlockSize) -> Result<()> {
+    pub(crate) fn to_bytes(&self, dest: &mut [u8]) -> Result<()> {
         let mut raw = RawPartition::default();
         raw.partition_type_guid = *uuid_hack(*self.partition_type.to_uuid().as_bytes()).as_bytes();
         raw.partition_guid = *uuid_hack(*self.guid.as_bytes()).as_bytes();
-        raw.starting_lba = (self.start / block_size).0;
-        raw.ending_lba = (self.end / block_size).0;
+        raw.starting_lba = self.start.0;
+        raw.ending_lba = self.end.0;
         raw.attributes = self.attributes;
         self.name()
             .encode_utf16()
@@ -199,13 +199,13 @@ impl Partition {
         self.guid
     }
 
-    /// Partition starting offset
-    pub fn start(&self) -> Offset {
+    /// Partition starting [`Block`]
+    pub fn start(&self) -> Block {
         self.start
     }
 
-    /// Partition ending offset
-    pub fn end(&self) -> Offset {
+    /// Partition ending [`Block`]
+    pub fn end(&self) -> Block {
         self.end
     }
 }
@@ -226,7 +226,7 @@ impl fmt::Debug for Partition {
 #[derive(Debug, Copy, Clone)]
 enum End {
     None,
-    Abs(Offset),
+    Abs(Block),
     Rel(Size),
 }
 
@@ -239,7 +239,7 @@ impl Default for End {
 /// Create a Partition
 #[derive(Copy, Clone)]
 pub struct PartitionBuilder {
-    start: Offset,
+    start: Block,
     end: End,
     partition_type: PartitionType,
     uuid: Uuid,
@@ -261,7 +261,7 @@ impl PartitionBuilder {
     }
 
     /// Partition start. Required.
-    pub fn start(mut self, start: Offset) -> Self {
+    pub fn start(mut self, start: Block) -> Self {
         self.start = start;
         self
     }
@@ -269,7 +269,7 @@ impl PartitionBuilder {
     /// Partition end. Required.
     ///
     /// Call one of this or [`PartitionBuilder::size`]
-    pub fn end(mut self, end: Offset) -> Self {
+    pub fn end(mut self, end: Block) -> Self {
         self.end = End::Abs(end);
         self
     }
@@ -278,7 +278,10 @@ impl PartitionBuilder {
     ///
     /// Call one of this or [`PartitionBuilder::end`]
     ///
-    /// This size will be rounded up to nearest block_size
+    /// # Warning
+    ///
+    /// Partitions can only be multiples of [`BlockSize`],
+    /// so make sure `size` is evenly divisible or it'll be round **down**.
     pub fn size(mut self, size: Size) -> Self {
         self.end = End::Rel(size);
         self
@@ -309,23 +312,19 @@ impl PartitionBuilder {
     /// - If not all required methods were called.
     /// - If the size is not at least `block_size`
     pub fn finish(self, block_size: BlockSize) -> Partition {
-        let mut end = match self.end {
+        let end = match self.end {
             End::Abs(end) => end,
             End::Rel(end) => {
                 // Minus block because last is inclusive.
-                Offset(
-                    (self.start.0 + end.as_bytes())
-                        .checked_sub(block_size.0)
+                Block(
+                    (Offset((self.start * block_size).0 + end.as_bytes()) / block_size)
+                        .0
+                        .checked_sub(1)
                         .expect("Invalid Partition Size"),
                 )
             }
             End::None => panic!("Invalid Partition Creation: Missing size"),
         };
-        // Round up
-        let e = end.0 % block_size.0;
-        if e != 0 {
-            end = Offset(end.0 + (block_size.0 - e));
-        }
         Partition {
             partition_type: self.partition_type,
             guid: self.uuid,
@@ -341,6 +340,7 @@ impl PartitionBuilder {
 mod tests {
     use super::*;
     use crate::util::{Result, *};
+    use pretty_assertions::assert_eq;
     use static_assertions::*;
 
     assert_eq_size!(RawPartition, [u8; PARTITION_ENTRY_SIZE as usize]);
@@ -352,7 +352,7 @@ mod tests {
     fn read_part() -> Result {
         let raw = data()?;
         let raw = &raw[OFFSET..];
-        let part = Partition::from_bytes(raw, BLOCK_SIZE)?;
+        let part = Partition::from_bytes(raw)?;
         assert_eq!(part.partition_type(), PartitionType::LinuxFilesystemData);
         Ok(())
     }
@@ -361,10 +361,10 @@ mod tests {
     fn part_roundtrip() -> Result {
         let raw = data_parted()?;
         let raw = &raw[OFFSET..];
-        let part = Partition::from_bytes(raw, BLOCK_SIZE)?;
+        let part = Partition::from_bytes(raw)?;
         assert_eq!("Test", part.name());
         let mut new_raw = [0; PARTITION_ENTRY_SIZE as usize];
-        part.to_bytes(&mut new_raw, BLOCK_SIZE)?;
+        part.to_bytes(&mut new_raw)?;
         assert_eq!(&new_raw[..], &raw[..PARTITION_ENTRY_SIZE as usize]);
         Ok(())
     }
@@ -374,15 +374,15 @@ mod tests {
         let raw = data()?;
         let raw_part = &raw[OFFSET..][..PARTITION_ENTRY_SIZE as usize];
         let part = PartitionBuilder::new(Uuid::parse_str(CF_PART_GUID)?)
-            .start(Size::from_mib(1).into())
+            .start(Size::from_mib(1) / BLOCK_SIZE)
             .size(Size::from_mib(8))
             .partition_type(PartitionType::LinuxFilesystemData)
             .finish(BLOCK_SIZE);
         let mut buf = [0; PARTITION_ENTRY_SIZE as usize];
-        part.to_bytes(&mut buf, BLOCK_SIZE)?;
+        part.to_bytes(&mut buf)?;
         //
-        let new = Partition::from_bytes(&buf, BLOCK_SIZE)?;
-        let old = Partition::from_bytes(&raw_part, BLOCK_SIZE)?;
+        let new = Partition::from_bytes(&buf)?;
+        let old = Partition::from_bytes(&raw_part)?;
         dbg!(new);
         dbg!(old);
         //
@@ -404,15 +404,15 @@ mod tests {
         raw_name[..name.len()].clone_from_slice(name.as_bytes());
         //
         let part = PartitionBuilder::new(Uuid::nil())
-            .start(Offset(0))
-            .end(Offset(BLOCK_SIZE.0))
+            .start(Block(34))
+            .end(Block(35))
             .partition_type(PartitionType::Unused)
             .name(name)
             .finish(BLOCK_SIZE);
         assert_eq!(name, part.name());
-        part.to_bytes(&mut raw, BLOCK_SIZE)?;
+        part.to_bytes(&mut raw)?;
         //
-        let part = Partition::from_bytes(&raw, BLOCK_SIZE)?;
+        let part = Partition::from_bytes(&raw)?;
         assert_eq!(name, part.name());
         Ok(())
     }
