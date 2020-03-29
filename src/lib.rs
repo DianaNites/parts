@@ -32,6 +32,8 @@
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 #![cfg_attr(feature = "nightly", feature(external_doc))]
 #![deny(missing_docs)]
+#[cfg(feature = "alloc")]
+extern crate alloc;
 
 #[cfg(all(test, feature = "std"))]
 mod util;

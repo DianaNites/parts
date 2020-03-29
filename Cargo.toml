@@ -29,6 +29,12 @@ default = ["std", "serde"]
 std = [
     "thiserror",
     "uuid/std",
+    "alloc",
+]
+# Alloc support
+# NOTE: This brings in `getrandom`,
+# which while no_std may lack an implementation for your embedded target
+alloc = [
     "uuid/v4",
 ]
 # Enable serde support

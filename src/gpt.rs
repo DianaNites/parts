@@ -4,6 +4,10 @@ use crate::{
     mbr::{ProtectiveMbr, MBR_SIZE},
     types::*,
 };
+#[cfg(feature = "alloc")]
+use alloc::vec;
+#[cfg(feature = "alloc")]
+use alloc::vec::Vec;
 use arrayvec::{Array, ArrayVec};
 use core::{convert::TryInto, mem};
 use crc::{crc32, Hasher32};
@@ -120,7 +124,7 @@ impl<N: Array<Item = Partition>> GptHelper<ArrayVec<N>> for ArrayVec<N> {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 impl GptHelper<Vec<Partition>> for Vec<Partition> {
     const SIZE: usize = mem::size_of::<Vec<Partition>>();
 
@@ -162,7 +166,7 @@ impl GptHelper<Vec<Partition>> for Vec<Partition> {
 ///
 /// # Memory Usage
 ///
-/// When using `std`, partitions are by default stored in a `Vec`,
+/// When using `alloc`/`std`, partitions are by default stored in a `Vec`,
 /// and there is no limit to how many can be read/written.
 /// In this case `Gpt` will take `16 + size_of::<Vec<_>>()` bytes
 ///
@@ -204,12 +208,12 @@ pub struct GptC<C> {
 }
 
 /// See [`GptC`] for docs.
-#[cfg(not(feature = "std"))]
+#[cfg(not(feature = "alloc"))]
 pub type Gpt<C = ArrayVec<[Partition; 128]>> = GptC<C>;
 
 /// See [`GptC`] for docs.
-#[cfg(feature = "std")]
-pub type Gpt<C = std::vec::Vec<Partition>> = GptC<C>;
+#[cfg(feature = "alloc")]
+pub type Gpt<C = Vec<Partition>> = GptC<C>;
 
 // Public APIs
 impl<C: GptHelper<C>> Gpt<C> {
