@@ -131,7 +131,10 @@ impl Partition {
     ///
     /// - [`Error::NotEnough`] if `source` is too small
     pub(crate) fn from_bytes(source: &[u8]) -> Result<Self> {
-        #[allow(clippy::cast_ptr_alignment)]
+        // SAFETY:
+        // - `source` is valid for `size_of::<RawPartition>` bytes
+        // - `RawPartition` is `repr(C)`
+        // - `read_unaligned` is used
         let part = unsafe {
             if source.len() < mem::size_of::<RawPartition>() {
                 return Err(Error::NotEnough);
@@ -171,10 +174,13 @@ impl Partition {
             .encode_utf16()
             .enumerate()
             .for_each(|(i, c)| raw.name[i] = c);
-        //
-        let raw = &raw as *const RawPartition as *const u8;
-        // Safe because we know the sizes
-        let raw = unsafe { slice::from_raw_parts(raw, mem::size_of::<RawPartition>()) };
+        // SAFETY:
+        // - `self` is valid and aligned.
+        // - `RawPartition` is `repr(C)`
+        let raw = unsafe {
+            let ptr = &raw as *const RawPartition as *const u8;
+            slice::from_raw_parts(ptr, mem::size_of::<RawPartition>())
+        };
         dest.get_mut(..mem::size_of::<RawPartition>())
             .ok_or(Error::NotEnough)?
             .copy_from_slice(raw);

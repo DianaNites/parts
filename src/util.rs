@@ -9,9 +9,11 @@ pub static TEST_PARTS_CF: &str = "tests/data/test_parts_cf";
 pub static TEST_PARTS: &str = "tests/data/test_parts";
 
 /// Test data block size
+// SAFETY: Not zero
 pub const BLOCK_SIZE: BlockSize = unsafe { BlockSize::new_unchecked(512) };
 
 /// Large block size
+// SAFETY: Not zero
 pub const LARGE_BLOCK_SIZE: BlockSize = unsafe { BlockSize::new_unchecked(4096) };
 
 /// Byte size of test data

@@ -588,6 +588,7 @@ mod test_no_std {
     use uuid::Uuid;
 
     // FIXME: should be from crate::util
+    // SAFETY: Not zero
     const BLOCK_SIZE: BlockSize = unsafe { BlockSize::new_unchecked(512) };
     const TEN_MIB_BYTES: usize = 10_485_760;
     type Result = super::Result<()>;

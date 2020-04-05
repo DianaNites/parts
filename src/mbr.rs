@@ -88,8 +88,11 @@ impl ProtectiveMbr {
         if source.len() != MBR_SIZE {
             return Err(Error::NotEnough);
         }
-        // Safe because ProtectiveMbr is simple and repr(C, packed),
-        // any value is valid, and we check the size of `source` above.
+        // SAFETY:
+        // - `source` is valid for `MBR_SIZE` bytes
+        // - `ProtectiveMbr` is `MBR_SIZE` bytes
+        // - `ProtectiveMbr` is `repr(C, packed)`
+        // - `read_unaligned` is used
         let mbr = unsafe { (source.as_ptr() as *const ProtectiveMbr).read_unaligned() };
         mbr.validate()?;
         Ok(mbr)
@@ -104,9 +107,13 @@ impl ProtectiveMbr {
         if dest.len() != MBR_SIZE {
             return Err(Error::NotEnough);
         }
-        let raw = self as *const ProtectiveMbr as *const u8;
-        // Safe because we know the sizes
-        let raw = unsafe { core::slice::from_raw_parts(raw, size_of::<ProtectiveMbr>()) };
+        // SAFETY:
+        // - `self` is valid and aligned.
+        // - `ProtectiveMbr`/`Self` is `repr(C, packed)`
+        let raw = unsafe {
+            let ptr = self as *const ProtectiveMbr as *const u8;
+            core::slice::from_raw_parts(ptr, size_of::<ProtectiveMbr>())
+        };
         dest.copy_from_slice(raw);
         Ok(())
     }

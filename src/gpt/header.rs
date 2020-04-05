@@ -46,10 +46,9 @@ pub fn uuid_hack(uuid: [u8; 16]) -> Uuid {
 /// `extra` is all bytes in the rest of the block, if any.
 fn calculate_crc(mut header: RawHeader, extra: &[u8]) -> u32 {
     header.header_crc32 = 0;
-    // # Safety
-    // - `RawHeader` is repr(C,packed)
-    // - Pointer will always be valid
-    // - size_of used
+    // SAFETY:
+    // - `&header` is valid and aligned
+    // - `RawHeader` is repr(C, packed)
     let source_bytes = unsafe {
         slice::from_raw_parts(
             (&header as *const _) as *const u8,
@@ -237,10 +236,11 @@ impl Header {
         if source.len() < block_size.get() as usize {
             return Err(Error::NotEnough);
         }
-        // # Safety
-        // - `source` is always a valid pointer
-        // - Errors if `source` doesn't have enough data
-        // - `RawHeader` is repr(C, packed)
+        // SAFETY:
+        // - `source` is valid for `size_of::<RawHeader>` bytes
+        // - `size_of::<RawHeader>` is less than `block_size`
+        // - `RawHeader` is `repr(C, packed)`
+        // - `read_unaligned` is used
         let raw = unsafe { (source.as_ptr() as *const RawHeader).read_unaligned() };
         if raw.signature != EFI_PART {
             return Err(Error::Invalid("Invalid Signature"));
@@ -285,10 +285,13 @@ impl Header {
         // No need to calculate or be passed it, should be set when `self` is created.
         raw.partitions_crc32 = self.partitions_crc32;
         raw.header_crc32 = calculate_crc(raw, &[]);
-        //
-        let raw = &raw as *const RawHeader as *const u8;
-        // Safe because we know the sizes
-        let raw = unsafe { slice::from_raw_parts(raw, mem::size_of::<RawHeader>()) };
+        // SAFETY:
+        // - `self` is valid and aligned.
+        // - `RawHeader` is `repr(C, packed)`
+        let raw = unsafe {
+            let ptr = &raw as *const RawHeader as *const u8;
+            slice::from_raw_parts(ptr, mem::size_of::<RawHeader>())
+        };
         //
         dest.get_mut(..mem::size_of::<RawHeader>())
             .ok_or(Error::NotEnough)?
