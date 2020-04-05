@@ -234,7 +234,7 @@ impl Header {
     /// - The GPT is invalid.
     /// - [`Error::NotEnough`] if `source` is not `block_size` bytes
     pub fn from_bytes(source: &[u8], block_size: BlockSize) -> Result<Self> {
-        if source.len() < block_size.0 as usize {
+        if source.len() < block_size.get() as usize {
             return Err(Error::NotEnough);
         }
         // # Safety
@@ -246,7 +246,7 @@ impl Header {
             return Err(Error::Invalid("Invalid Signature"));
         }
         // See [`RawHeader::header_size`]
-        if raw.header_size < HEADER_SIZE || raw.header_size as u64 > block_size.0 {
+        if raw.header_size < HEADER_SIZE || raw.header_size as u64 > block_size.get() {
             return Err(Error::Invalid(
                 "Header size invalid, less than 92 or bigger than the block size",
             ));
@@ -309,7 +309,7 @@ mod tests {
     #[test]
     fn round_trip() -> Result {
         let raw = data()?;
-        let raw_primary = &raw[BLOCK_SIZE.0 as usize..][..BLOCK_SIZE.0 as usize];
+        let raw_primary = &raw[BLOCK_SIZE.get() as usize..][..BLOCK_SIZE.get() as usize];
         let parsed_raw_primary = Header::from_bytes(raw_primary, BLOCK_SIZE)?;
         //
         let mut raw_parsed_raw_primary = [0u8; HEADER_SIZE as usize];
@@ -326,7 +326,7 @@ mod tests {
     #[test]
     fn exact_bytes() -> Result {
         let raw = data()?;
-        let raw_primary = &raw[BLOCK_SIZE.0 as usize..][..BLOCK_SIZE.0 as usize];
+        let raw_primary = &raw[BLOCK_SIZE.get() as usize..][..BLOCK_SIZE.get() as usize];
         let raw_backup = &raw[raw.len() - 512..];
         //
         let mut my_primary = Header::new(
@@ -349,8 +349,8 @@ mod tests {
         my_primary.first_usable = Block(2048);
         my_backup.first_usable = Block(2048);
         //
-        let mut raw_my_primary = [0u8; BLOCK_SIZE.0 as usize];
-        let mut raw_my_backup = [0u8; BLOCK_SIZE.0 as usize];
+        let mut raw_my_primary = [0u8; BLOCK_SIZE.get() as usize];
+        let mut raw_my_backup = [0u8; BLOCK_SIZE.get() as usize];
         my_primary.to_bytes(&mut raw_my_primary[..HEADER_SIZE as usize])?;
         my_backup.to_bytes(&mut raw_my_backup[..HEADER_SIZE as usize])?;
         //
@@ -368,14 +368,14 @@ mod tests {
 
     #[test]
     fn read_write_header() -> Result {
-        let raw = &data()?[BLOCK_SIZE.0 as usize..][..BLOCK_SIZE.0 as usize];
+        let raw = &data()?[BLOCK_SIZE.get() as usize..][..BLOCK_SIZE.get() as usize];
         let header = Header::from_bytes(raw, BLOCK_SIZE).map_err(anyhow::Error::msg)?;
         assert_eq!(
             header.uuid,
             Uuid::parse_str(CF_DISK_GUID).unwrap(),
             "UUID didn't match test data"
         );
-        let mut written = vec![0; BLOCK_SIZE.0 as usize];
+        let mut written = vec![0; BLOCK_SIZE.get() as usize];
         header.to_bytes(&mut written[..HEADER_SIZE as usize])?;
         assert_eq!(
             written.len(),
@@ -389,14 +389,14 @@ mod tests {
 
     #[test]
     fn read_write_large_header() -> Result {
-        let raw = &data()?[BLOCK_SIZE.0 as usize..][..BLOCK_SIZE.0 as usize];
+        let raw = &data()?[BLOCK_SIZE.get() as usize..][..BLOCK_SIZE.get() as usize];
         let header = Header::from_bytes(raw, BLOCK_SIZE).map_err(anyhow::Error::msg)?;
         assert_eq!(
             header.uuid,
             Uuid::parse_str(CF_DISK_GUID).unwrap(),
             "UUID didn't match test data"
         );
-        let mut written = vec![0; LARGE_BLOCK_SIZE.0 as usize];
+        let mut written = vec![0; LARGE_BLOCK_SIZE.get() as usize];
         header.to_bytes(&mut written[..HEADER_SIZE as usize])?;
         // Compare only header bytes
         let written = &written[..HEADER_SIZE as usize];

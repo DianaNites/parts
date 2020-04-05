@@ -346,7 +346,7 @@ mod tests {
     assert_eq_size!(RawPartition, [u8; PARTITION_ENTRY_SIZE as usize]);
 
     /// Skip the MBR and GPT, first partition.
-    const OFFSET: usize = (BLOCK_SIZE.0 * 2) as usize;
+    const OFFSET: usize = (BLOCK_SIZE.get() * 2) as usize;
 
     #[test]
     fn read_part() -> Result {

@@ -19,7 +19,7 @@
 //! # #[cfg(feature = "std")]
 //! # fn main() -> Result<(), Box<dyn Error>> {
 //! # let image = File::open("tests/data/test_parts_cf")?;
-//! let mut gpt: Gpt = Gpt::from_reader(image, BlockSize(512))?;
+//! let mut gpt: Gpt = Gpt::from_reader(image, BlockSize::new(512))?;
 //! for part in gpt.partitions() {
 //!     println!("Partition Name: {}", part.name());
 //!     println!("Partition Type: {}", part.partition_type());

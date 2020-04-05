@@ -196,7 +196,7 @@ impl GptHelper<Vec<Partition>> for Vec<Partition> {
 /// let gpt: GptC<ArrayVec<[Partition; 4]>> = GptC::new(
 ///     Uuid::nil(),
 ///     Size::from_mib(10),
-///     BlockSize(512)
+///     BlockSize::new(512)
 /// );
 /// ```
 #[derive(Copy, Debug, Clone, PartialEq)]
@@ -244,7 +244,7 @@ impl<C: GptHelper<C>> Gpt<C> {
     /// - [`Error::NotEnough`] if `source` is too small.
     pub fn from_bytes(source: &[u8], block_size: BlockSize) -> Result<Self> {
         // TODO: Check minimum size?
-        let b_size = block_size.0 as usize;
+        let b_size = block_size.get() as usize;
         let primary = source.get(..b_size * 2).ok_or(Error::NotEnough)?;
         let alt = source
             .get(source.len() - b_size..)
@@ -312,7 +312,7 @@ impl<C: GptHelper<C>> Gpt<C> {
     ///         buf.copy_from_slice(data);
     ///         Ok(())
     ///     },
-    ///     BlockSize(512),
+    ///     BlockSize::new(512),
     ///     Size::from_mib(10)
     /// ).unwrap();
     /// # Ok(()) }
@@ -366,8 +366,8 @@ impl<C: GptHelper<C>> Gpt<C> {
     pub fn from_reader<RS: Read + Seek>(mut source: RS, block_size: BlockSize) -> Result<Self> {
         let disk_size = Size::from_bytes(source.seek(SeekFrom::End(0))?);
         let last_lba = (disk_size / block_size) - 1;
-        let mut primary = vec![0; (block_size.0 * 2) as usize];
-        let mut alt = vec![0; block_size.0 as usize];
+        let mut primary = vec![0; (block_size.get() * 2) as usize];
+        let mut alt = vec![0; block_size.get() as usize];
         source.seek(SeekFrom::Start(0))?;
         source.read_exact(&mut primary)?;
         source.seek(SeekFrom::Start((last_lba * block_size).0))?;
@@ -618,7 +618,7 @@ mod test_no_std {
     use uuid::Uuid;
 
     // FIXME: should be from crate::util
-    const BLOCK_SIZE: BlockSize = BlockSize(512);
+    const BLOCK_SIZE: BlockSize = unsafe { BlockSize::new_unchecked(512) };
     const TEN_MIB_BYTES: usize = 10_485_760;
     type Result = super::Result<()>;
 
@@ -646,7 +646,7 @@ mod test_no_std {
     #[test]
     #[should_panic = "MBR signature invalid"]
     fn missing_mbr_test() {
-        let raw = [0; (BLOCK_SIZE.0 * 2) as usize];
+        let raw = [0; (BLOCK_SIZE.get() * 2) as usize];
         let _gpt: Gpt = Gpt::from_bytes(&raw, BLOCK_SIZE).unwrap();
     }
 
@@ -768,7 +768,7 @@ mod test {
     where
         N: GptHelper<N> + core::fmt::Debug,
     {
-        let block = BLOCK_SIZE.0 as usize;
+        let block = BLOCK_SIZE.get() as usize;
 
         let primary = &raw[..block * 2];
         let alt = &raw[raw.len() - block..];

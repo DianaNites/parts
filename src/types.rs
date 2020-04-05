@@ -1,5 +1,5 @@
 //! Types for use in [`crate::Gpt`]
-use core::ops;
+use core::{num::NonZeroU64, ops};
 use derive_more::*;
 #[cfg(feature = "serde")]
 use serde_crate::{Deserialize, Serialize};
@@ -58,7 +58,7 @@ macro_rules! __ByteSizeImplAs {
 
 /// Represents a devices Block Size, in bytes.
 ///
-/// This is usually either `512` or `4096`, but can be any value.
+/// This is usually either `512` or `4096`, but can be any value except zero.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, From, Into, Display)]
 #[cfg_attr(
     feature = "serde",
@@ -66,7 +66,32 @@ macro_rules! __ByteSizeImplAs {
     serde(crate = "serde_crate", transparent)
 )]
 #[repr(transparent)]
-pub struct BlockSize(pub u64);
+pub struct BlockSize(NonZeroU64);
+
+impl BlockSize {
+    /// Create a new `BlockSize`.
+    ///
+    /// # Panics
+    ///
+    /// - If `val` is zero.
+    pub fn new(val: u64) -> Self {
+        Self(NonZeroU64::new(val).unwrap())
+    }
+
+    /// Create a new `BlockSize`.
+    ///
+    /// # Safety
+    ///
+    /// `val` must not be zero.
+    pub const unsafe fn new_unchecked(val: u64) -> Self {
+        Self(NonZeroU64::new_unchecked(val))
+    }
+
+    /// Get the block size as a `u64`
+    pub const fn get(self) -> u64 {
+        self.0.get()
+    }
+}
 
 /// Represents a byte offset
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default, Display, Into, From)]
@@ -83,7 +108,7 @@ impl ops::Div<BlockSize> for Offset {
     type Output = Block;
 
     fn div(self, rhs: BlockSize) -> Self::Output {
-        let block = self.0 / rhs.0;
+        let block = self.0 / rhs.get();
         Block(block)
     }
 }
@@ -152,7 +177,7 @@ impl From<Offset> for Size {
 /// A [`Size`] from a [`BlockSize`]
 impl From<BlockSize> for Size {
     fn from(o: BlockSize) -> Self {
-        Self(o.0)
+        Self(o.get())
     }
 }
 
@@ -160,13 +185,13 @@ impl ops::Add<BlockSize> for Size {
     type Output = Size;
 
     fn add(self, rhs: BlockSize) -> Self::Output {
-        self + Size(rhs.0)
+        self + Size(rhs.get())
     }
 }
 
 impl ops::AddAssign<BlockSize> for Size {
     fn add_assign(&mut self, rhs: BlockSize) {
-        *self += Size(rhs.0);
+        *self += Size(rhs.get());
     }
 }
 
@@ -174,13 +199,13 @@ impl ops::Sub<BlockSize> for Size {
     type Output = Size;
 
     fn sub(self, rhs: BlockSize) -> Self::Output {
-        self - Size(rhs.0)
+        self - Size(rhs.get())
     }
 }
 
 impl ops::SubAssign<BlockSize> for Size {
     fn sub_assign(&mut self, rhs: BlockSize) {
-        *self -= Size(rhs.0);
+        *self -= Size(rhs.get());
     }
 }
 
@@ -189,7 +214,7 @@ impl ops::Div<BlockSize> for Size {
     type Output = Block;
 
     fn div(self, rhs: BlockSize) -> Self::Output {
-        let block = self.0 / rhs.0;
+        let block = self.0 / rhs.get();
         Block(block)
     }
 }
@@ -211,7 +236,7 @@ impl ops::Mul<BlockSize> for Block {
     type Output = Offset;
 
     fn mul(self, rhs: BlockSize) -> Self::Output {
-        Offset(self.0 * rhs.0)
+        Offset(self.0 * rhs.get())
     }
 }
 
