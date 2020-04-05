@@ -15,12 +15,12 @@ crc = { version = "1.8.1", default-features = false }
 derive_more = "0.99.5"
 displaydoc = { version = "0.1.5", default-features = false }
 thiserror = { version = "1.0.14", optional = true }
-serde_crate = { package = "serde", version = "1.0.105", default-features = false, optional = true }
+serde_crate = { package = "serde", version = "1.0.106", default-features = false, optional = true }
 arrayvec = { version = "0.5.1", default-features = false }
 
 [dev-dependencies]
 static_assertions = "1.1.0"
-anyhow = "1.0.27"
+anyhow = "1.0.28"
 thiserror = "1.0.14"
 pretty_assertions = "0.6.1"
 
