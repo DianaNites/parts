@@ -220,7 +220,6 @@ impl<C: GptHelper<C>> Gpt<C> {
     /// - If `block_size` is zero.
     pub fn new(uuid: Uuid, disk_size: Size, block_size: BlockSize) -> Self {
         assert_ne!(disk_size.as_bytes(), 0, "Disk size must not be zero");
-        assert_ne!(block_size.0, 0, "Block size must not be zero");
         Self {
             uuid,
             partitions: C::new(),
