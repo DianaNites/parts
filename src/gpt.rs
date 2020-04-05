@@ -9,7 +9,7 @@ use alloc::vec;
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 use arrayvec::{Array, ArrayVec};
-use core::{convert::TryInto, mem};
+use core::convert::TryInto;
 use crc::{crc32, Hasher32};
 #[cfg(feature = "std")]
 use std::io::{prelude::*, SeekFrom};
@@ -628,12 +628,12 @@ mod test_no_std {
     #[should_panic(expected = "Attempted to add overlapping partitions")]
     fn invalid_partitions() {
         let mut gpt: Gpt = Gpt::new(Uuid::nil(), Size::from_mib(10), BLOCK_SIZE);
-        let part = PartitionBuilder::new(Uuid::nil())
+        let part = PartitionBuilder::new(Uuid::nil(), &gpt)
             .start(gpt.first_usable())
             .end(gpt.first_usable() + 1)
             .partition_type(PartitionType::Unused);
-        gpt.add_partition(part.finish(BLOCK_SIZE)).unwrap();
-        let e = gpt.add_partition(part.finish(BLOCK_SIZE)).unwrap_err();
+        gpt.add_partition(part.finish()).unwrap();
+        let e = gpt.add_partition(part.finish()).unwrap_err();
         panic!(e.to_string());
     }
 
@@ -642,22 +642,22 @@ mod test_no_std {
     #[should_panic(expected = "Invalid Partition Size")]
     fn invalid_partitions_size() {
         let mut gpt: Gpt = Gpt::new(Uuid::nil(), Size::from_mib(10), BLOCK_SIZE);
-        let part = PartitionBuilder::new(Uuid::nil())
+        let part = PartitionBuilder::new(Uuid::nil(), &gpt)
             .start(Block(0))
             .size(Size::from_bytes(0))
             .partition_type(PartitionType::Unused);
-        gpt.add_partition(part.finish(BLOCK_SIZE)).unwrap();
+        gpt.add_partition(part.finish()).unwrap();
     }
 
     /// A 512 byte partition should be valid
     #[test]
     fn valid_one_block_partition() {
         let mut gpt: Gpt = Gpt::new(Uuid::nil(), Size::from_mib(10), BLOCK_SIZE);
-        let part = PartitionBuilder::new(Uuid::nil())
+        let part = PartitionBuilder::new(Uuid::nil(), &gpt)
             .start(gpt.first_usable())
             .end(gpt.first_usable())
             .partition_type(PartitionType::Unused);
-        gpt.add_partition(part.finish(BLOCK_SIZE)).unwrap();
+        gpt.add_partition(part.finish()).unwrap();
     }
 
     /// Don't panic on slice indexing if given an empty slice,
@@ -685,10 +685,10 @@ mod test_no_std {
         let size = Size::from_bytes(TEN_MIB_BYTES as u64);
         let mut gpt: Gpt = Gpt::new(Uuid::nil(), Size::from_mib(10), BLOCK_SIZE);
         let rem = gpt.remaining();
-        let part = PartitionBuilder::new(Uuid::nil())
+        let part = PartitionBuilder::new(Uuid::nil(), &gpt)
             .start(gpt.first_usable())
             .size(rem)
-            .finish(BLOCK_SIZE);
+            .finish();
         assert_eq!(
             part.end(),
             gpt.last_usable(),
@@ -699,10 +699,10 @@ mod test_no_std {
         dbg!(expected);
         assert_eq!(rem, expected, "Remaining wasn't expected size");
         //
-        let part = PartitionBuilder::new(Uuid::nil())
+        let part = PartitionBuilder::new(Uuid::nil(), &gpt)
             .start(gpt.first_usable())
             .size(rem - Size::from_mib(1))
-            .finish(BLOCK_SIZE);
+            .finish();
         gpt.add_partition(part)?;
         let rem = gpt.remaining();
         dbg!(rem);
@@ -734,7 +734,7 @@ mod test {
     use pretty_assertions::assert_eq;
     use std::{io, vec::Vec as StdVec};
 
-    type Array<N> = ArrayVec<N>;
+    type Array<N = [Partition; 128]> = ArrayVec<N>;
     type Vec = StdVec<Partition>;
 
     fn read_gpt_size<N>(raw: &[u8]) -> Result<Gpt<N>>
@@ -880,12 +880,12 @@ mod test {
             Size::from_mib(10),
             BLOCK_SIZE,
         );
-        let part = PartitionBuilder::new(Uuid::parse_str(CF_PART_GUID)?)
+        let part = PartitionBuilder::new(Uuid::parse_str(CF_PART_GUID)?, &gpt)
             // FIXME: Shouldn't have to use BLOCK_SIZE here
             .start(Size::from_mib(1) / BLOCK_SIZE)
             .size(Size::from_mib(8))
             .partition_type(PartitionType::LinuxFilesystemData);
-        gpt.add_partition(part.finish(BLOCK_SIZE))?;
+        gpt.add_partition(part.finish())?;
         assert_eq!(gpt, test_gpt);
         Ok(())
     }

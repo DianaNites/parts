@@ -244,19 +244,21 @@ pub struct PartitionBuilder {
     partition_type: PartitionType,
     uuid: Uuid,
     name: ArrayString<[u8; 72]>,
+    block_size: BlockSize,
 }
 
 impl PartitionBuilder {
     /// New builder
     ///
     /// `uuid` is a unique identifer for the partition.
-    pub fn new(uuid: Uuid) -> Self {
+    pub fn new(uuid: Uuid, gpt: &crate::Gpt) -> Self {
         Self {
             start: Default::default(),
             end: Default::default(),
             partition_type: Default::default(),
             uuid,
             name: Default::default(),
+            block_size: gpt.block_size,
         }
     }
 
@@ -310,8 +312,8 @@ impl PartitionBuilder {
     /// # Panics
     ///
     /// - If not all required methods were called.
-    /// - If the size is not at least `block_size`
-    pub fn finish(self, block_size: BlockSize) -> Partition {
+    pub fn finish(self) -> Partition {
+        let block_size = self.block_size;
         let end = match self.end {
             End::Abs(end) => end,
             End::Rel(end) => {
@@ -373,11 +375,14 @@ mod tests {
     fn create_part() -> Result {
         let raw = data()?;
         let raw_part = &raw[OFFSET..][..PARTITION_ENTRY_SIZE as usize];
-        let part = PartitionBuilder::new(Uuid::parse_str(CF_PART_GUID)?)
-            .start(Size::from_mib(1) / BLOCK_SIZE)
-            .size(Size::from_mib(8))
-            .partition_type(PartitionType::LinuxFilesystemData)
-            .finish(BLOCK_SIZE);
+        let part = PartitionBuilder::new(
+            Uuid::parse_str(CF_PART_GUID)?,
+            &crate::Gpt::new(Uuid::nil(), Size::from_mib(1), BlockSize::new(512)),
+        )
+        .start(Size::from_mib(1) / BLOCK_SIZE)
+        .size(Size::from_mib(8))
+        .partition_type(PartitionType::LinuxFilesystemData)
+        .finish();
         let mut buf = [0; PARTITION_ENTRY_SIZE as usize];
         part.to_bytes(&mut buf)?;
         //
@@ -403,12 +408,15 @@ mod tests {
         let mut raw_name = [0; 72];
         raw_name[..name.len()].clone_from_slice(name.as_bytes());
         //
-        let part = PartitionBuilder::new(Uuid::nil())
-            .start(Block(34))
-            .end(Block(35))
-            .partition_type(PartitionType::Unused)
-            .name(name)
-            .finish(BLOCK_SIZE);
+        let part = PartitionBuilder::new(
+            Uuid::nil(),
+            &crate::Gpt::new(Uuid::nil(), Size::from_mib(1), BlockSize::new(512)),
+        )
+        .start(Block(34))
+        .end(Block(35))
+        .partition_type(PartitionType::Unused)
+        .name(name)
+        .finish();
         assert_eq!(name, part.name());
         part.to_bytes(&mut raw)?;
         //
