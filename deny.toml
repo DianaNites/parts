@@ -1,0 +1,27 @@
+targets = [
+	{ triple = "x86_64-unknown-linux-gnu" }
+]
+
+[licenses]
+unlicensed = "warn"
+allow-osi-fsf-free = "both"
+copyleft = "deny"
+default = "warn"
+confidence-threshold = 0.95
+allow = [
+    "MIT",
+    "Apache-2.0",
+]
+
+[bans]
+multiple-versions = "deny"
+highlight = "simplest-path"
+
+[advisories]
+db-path = "~/.cargo/advisory-db"
+db-url = "https://github.com/RustSec/advisory-db"
+vulnerability = "deny"
+unmaintained = "warn"
+yanked = "warn"
+notice = "warn"
+severity-threshold = "medium"
