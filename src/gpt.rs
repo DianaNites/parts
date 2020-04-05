@@ -81,9 +81,6 @@ fn validate<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8]) -
 ///
 /// You shouldn't need to worry about this.
 pub trait GptHelper<C> {
-    /// size_of `C`
-    const SIZE: usize;
-
     /// New C
     fn new() -> C;
 
@@ -101,8 +98,6 @@ pub trait GptHelper<C> {
 }
 
 impl<N: Array<Item = Partition>> GptHelper<ArrayVec<N>> for ArrayVec<N> {
-    const SIZE: usize = mem::size_of::<ArrayVec<N>>();
-
     fn new() -> ArrayVec<N> {
         ArrayVec::new()
     }
@@ -126,8 +121,6 @@ impl<N: Array<Item = Partition>> GptHelper<ArrayVec<N>> for ArrayVec<N> {
 
 #[cfg(feature = "alloc")]
 impl GptHelper<Vec<Partition>> for Vec<Partition> {
-    const SIZE: usize = mem::size_of::<Vec<Partition>>();
-
     fn new() -> Vec<Partition> {
         // TODO: Const
         Vec::with_capacity(128)
@@ -624,22 +617,25 @@ mod test_no_std {
 
     type DefArray = ArrayVec<[Partition; 128]>;
 
-    #[cfg(feature = "std")]
-    assert_eq_size!(
-        Gpt,
-        [u8; mem::size_of::<Uuid>()
-            + Vec::<Partition>::SIZE
-            + mem::size_of::<BlockSize>()
-            + mem::size_of::<Size>()]
-    );
+    // Used by assert_eq_size
+    #[allow(dead_code)]
+    type EmptyArray = ArrayVec<[Partition; 0]>;
 
+    // GptC is documented as being 32 bytes.
+    assert_eq_size!(GptC<EmptyArray>, [u8; 32]);
+
+    // Option<GptC> is documented as being 32 bytes.
+    assert_eq_size!(Option<GptC<EmptyArray>>, [u8; 32]);
+
+    //
+    #[cfg(feature = "std")]
+    assert_eq_size!(Gpt, [u8; 32 + mem::size_of::<Vec::<Partition>>()]);
+
+    //
     #[cfg(not(feature = "std"))]
     assert_eq_size!(
         Gpt,
-        [u8; mem::size_of::<Uuid>()
-            + ArrayVec::<[Partition; 128]>::SIZE
-            + mem::size_of::<BlockSize>()
-            + mem::size_of::<Size>()]
+        [u8; 32 + mem::size_of::<ArrayVec::<[Partition; 128]>>()]
     );
 
     /// Should error when the MBR is invalid/missing.
