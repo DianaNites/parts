@@ -157,28 +157,6 @@ impl GptHelper<Vec<Partition>> for Vec<Partition> {
 ///
 /// Partitions are sorted by their starting offset in the partition array
 ///
-/// # Memory Usage
-///
-/// When using `alloc`/`std`, partitions are by default stored in a `Vec`,
-/// and there is no limit to how many can be read/written.
-/// In this case `Gpt` will take `16 + size_of::<Vec<_>>()` bytes
-///
-/// But when `no_std`, partitions are stored in an `ArrayVec`,
-/// and will by default use at least `16KiB` of space.
-///
-/// This is because the GPT spec requires a minimum of 16KiB reserved
-/// for the partition array.
-///
-/// If you are particularly memory-constrained, or need to support more
-/// partitions, this type is generic over the container, decreasing memory
-/// usage.
-///
-/// WARNING: Partitions can be effectively lost this way, during writing.
-///
-/// If there are 5 partitions and you constrain `GptC` to support only 4,
-/// it's only possible to write the 4 back out,
-/// the 5th will not be included in the partition CRC or array.
-///
 /// # Examples
 ///
 /// `GptC` supporting only 4 partitions.
