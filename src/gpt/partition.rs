@@ -139,6 +139,7 @@ impl Partition {
             if source.len() < mem::size_of::<RawPartition>() {
                 return Err(Error::NotEnough);
             }
+            #[allow(clippy::cast_ptr_alignment)]
             (source.as_ptr() as *const RawPartition).read_unaligned()
         };
         let mut name = ArrayString::new();
