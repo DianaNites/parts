@@ -1,4 +1,4 @@
-//! Types for use in [`crate::Gpt`]
+//! Type-safe Newtype wrappers
 use core::{num::NonZeroU64, ops};
 use derive_more::*;
 #[cfg(feature = "serde")]
@@ -56,9 +56,7 @@ macro_rules! __ByteSizeImplAs {
     };
 }
 
-/// Represents a devices Block Size, in bytes.
-///
-/// This is usually either `512` or `4096`, but can be any value except zero.
+/// GPT Block Size, in bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, From, Into, Display)]
 #[cfg_attr(
     feature = "serde",
@@ -82,7 +80,7 @@ impl BlockSize {
     ///
     /// # Safety
     ///
-    /// `val` must not be zero.
+    /// - `val` must not be zero.
     pub const unsafe fn new_unchecked(val: u64) -> Self {
         Self(NonZeroU64::new_unchecked(val))
     }
@@ -93,7 +91,7 @@ impl BlockSize {
     }
 }
 
-/// Represents a byte offset
+/// Represents a byte offset.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default, Display, Into, From)]
 #[cfg_attr(
     feature = "serde",
@@ -119,7 +117,7 @@ impl From<Size> for Offset {
     }
 }
 
-/// Represents a size
+/// Device or Partition Size.
 #[derive(
     Copy,
     Clone,
@@ -219,9 +217,9 @@ impl ops::Div<BlockSize> for Size {
     }
 }
 
-/// Represents a Logical Block Address
+/// Device Logical Block Address
 ///
-/// One Block is [`BlockSize`] bytes.
+/// The size of a block is dependent on it's associated [`BlockSize`].
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Display, Default)]
 #[cfg_attr(
     feature = "serde",

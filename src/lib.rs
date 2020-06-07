@@ -3,6 +3,13 @@
 //! The primary type for interacting the a GPT table is [`Gpt`].
 //! From here you can add and remove partitions.
 //!
+//! # Features
+//!
+//! - `default`: `serde` and `std`.
+//! - `serde`: [`PartitionType`], [`uuid::Uuid`], everything in [`types`] become
+//!   Serde compatible.
+//! - `std`: Standard library support and integration.
+//!
 //! # Usage
 //!
 //! List all partitions
