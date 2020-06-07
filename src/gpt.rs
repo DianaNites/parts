@@ -418,15 +418,21 @@ impl<C: GptHelper<C>> Gpt<C> {
         disk_size: Size,
     ) -> Result<()> {
         let last_lba = (disk_size / block_size) - 1;
-        let mbr = ProtectiveMbr::new(last_lba);
-        let mut mbr_buf = [0; MBR_SIZE];
-        mbr.to_bytes(&mut mbr_buf)?;
-        func(Size::from_bytes(0).into(), &mbr_buf)?;
-        //
-        let partition_len = self.partitions.as_slice().len().try_into().unwrap();
+        {
+            let mbr = ProtectiveMbr::new(last_lba);
+            let mut mbr_buf = [0; MBR_SIZE];
+            mbr.to_bytes(&mut mbr_buf)?;
+            func(Size::from_bytes(0).into(), &mbr_buf)?;
+        }
+
+        let partition_len = self
+            .partitions
+            .as_slice()
+            .len()
+            .try_into()
+            .expect("Too many partitions, would overflow u32");
         let mut partition_buf = [0; PARTITION_ENTRY_SIZE as usize];
         let mut digest = crc32::Digest::new(crc32::IEEE);
-        // FIXME: Invalid for N lower than 128?
         for part in self.partitions.as_slice() {
             part.to_bytes(&mut partition_buf)?;
             digest.write(&partition_buf);
@@ -450,9 +456,9 @@ impl<C: GptHelper<C>> Gpt<C> {
                 return Err(Error::NotEnough);
             }
         }
-        //
+
         self.write_header_array(&mut func, alt, last_lba, block_size)?;
-        //
+
         let primary = Header::new(
             HeaderKind::Primary,
             partition_len,
