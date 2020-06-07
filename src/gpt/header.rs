@@ -30,6 +30,8 @@ pub const PARTITION_ENTRY_SIZE: u32 = 128;
 /// GPT stores UUID's in big endian, but with the time* fields as little endian.
 ///
 /// See Appendix A for more details.
+///
+/// See https://github.com/uuid-rs/uuid/issues/462
 pub fn uuid_hack(uuid: [u8; 16]) -> Uuid {
     // Works because from_bytes treats the fields as big endian
     // as_fields types them for us, still big-endian
