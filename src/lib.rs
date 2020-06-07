@@ -50,7 +50,7 @@ pub use gpt::{
     Gpt,
     GptC,
 };
-pub use partitions::*;
+pub use partitions::PartitionType;
 
 // Re-exports
 pub use arrayvec;
