@@ -253,7 +253,7 @@ impl<C: GptHelper<C>> Gpt<C> {
                 Ok(())
             },
             block_size,
-            Size::from_bytes(source.len() as u64),
+            Size::from_bytes(source.len().try_into().expect("Source too large for u64")),
         )
     }
 
