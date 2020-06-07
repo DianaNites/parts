@@ -60,6 +60,13 @@ macro_rules! partition_type {
                 }
             }
         }
+
+        impl Default for PartitionType_ {
+            fn default() -> Self {
+                // INFO: This is kinda hacky, it depends on `Unused` being defined
+                Self::Unused
+            }
+        }
     };
 }
 
