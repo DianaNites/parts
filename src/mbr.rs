@@ -2,8 +2,12 @@
 use crate::{gpt::error::*, types::*};
 use core::{convert::TryFrom, mem::size_of};
 
+/// Hard-coded legacy MBR size.
 pub const MBR_SIZE: usize = 512;
 
+/// Legacy MBR boot code.
+///
+/// Required because a bare array wouldn't be `Copy`.
 #[derive(Copy, Clone)]
 #[repr(transparent)]
 struct BootCode([u8; 440]);
