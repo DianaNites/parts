@@ -27,7 +27,7 @@ impl Default for BootCode {
 /// GPT Protective MBR
 #[derive(PartialEq, Copy, Clone)]
 #[repr(C, packed)]
-pub struct ProtectiveMbr {
+pub(crate) struct ProtectiveMbr {
     /// Bios boot code. Unused by GPT.
     boot_code: BootCode,
 
