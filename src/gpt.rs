@@ -80,23 +80,28 @@ fn validate<F: FnMut(Offset, &mut [u8]) -> Result<()>, CB: FnMut(usize, &[u8]) -
 /// Helper trait for [`GptC`].
 ///
 /// You shouldn't need to worry about this.
-pub trait GptHelper<C> {
-    /// New C
-    fn new() -> C;
+///
+/// This is used to allow [`GptC`] to be generic over the container,
+/// supporting both `std` and `no_std`, without exposing weird trait bounds to
+/// the user.
+pub trait GptHelper<Container> {
+    /// Create a new `Container`
+    fn new() -> Container;
 
-    /// C.as_slice
+    /// Get a slice of [`Partition`]s from `Container`
     fn as_slice(&self) -> &[Partition];
 
-    /// C.as_mut_slice
+    /// Get a mutable slice of [`Partition`]s from `Container`
     fn as_mut_slice(&mut self) -> &mut [Partition];
 
-    /// C.push
+    /// Add a [`Partition`] to the `Container`. Failable.
     fn push(&mut self, part: Partition) -> Result<()>;
 
-    /// C.remove
+    /// Remove and return the [`Partition`] at `index` from the `Container`.
     fn remove(&mut self, index: usize) -> Partition;
 }
 
+/// Support [`ArrayVec`] for `no_std`
 impl<N: Array<Item = Partition>> GptHelper<ArrayVec<N>> for ArrayVec<N> {
     fn new() -> ArrayVec<N> {
         ArrayVec::new()
@@ -119,6 +124,7 @@ impl<N: Array<Item = Partition>> GptHelper<ArrayVec<N>> for ArrayVec<N> {
     }
 }
 
+/// Support [`Vec`] for `std`/`alloc`.
 #[cfg(feature = "alloc")]
 impl GptHelper<Vec<Partition>> for Vec<Partition> {
     fn new() -> Vec<Partition> {
@@ -144,22 +150,35 @@ impl GptHelper<Vec<Partition>> for Vec<Partition> {
     }
 }
 
-/// Represents a GUID Partition Table
+/// GUID Partition Table
 ///
 /// All modifications are done in-memory,
-/// and when *only* effect partition entries, not the data in them.
+/// and *should* only affect partition entries, not data anywhere else on disk.
 ///
-/// Changes only take affect when [`GptC::to_bytes`]/[`GptC::to_writer`] is
-/// called.
+/// Changes can be committed to disk with
+/// [`GptC::to_bytes`]/[`GptC::to_writer`].
 ///
-/// This type is largely agnostic to the underlying disk and block size.
-/// It will remember the disk/block size it was created with, for convenience.
+/// This type is largely agnostic to the underlying disk and block sizes.
+/// It will remember the disk/block size it was created with, for convenience,
+/// but these values may be changed if needed, for example when moving to a
+/// differently sized disk.
 ///
-/// Partitions are sorted by their starting offset in the partition array
+/// Partitions are sorted by their starting offset in the partition array.
+///
+/// If you have strict `no_std` memory requirements,
+/// this struct can be made smaller by limiting the number of
+/// partitions it stores.
+///
+/// Note that doing so will effectively "cut off" any partitions beyond that
+/// value, if writing the GPT back out.
+///
+/// If possible you may instead want to use the `alloc` feature,
+/// which allows usage of the smaller [`Vec`] rather than the inline
+/// [`ArrayVec`].
 ///
 /// # Examples
 ///
-/// `GptC` supporting only 4 partitions.
+/// [`GptC`] supporting only 4 partitions.
 ///
 /// ```rust
 /// use parts::{arrayvec::ArrayVec, GptC, Partition, uuid::Uuid, types::*};
