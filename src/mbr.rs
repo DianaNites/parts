@@ -106,7 +106,7 @@ impl ProtectiveMbr {
     ///
     /// # Errors
     ///
-    /// - [`Error::NotEnough`] if `source` is not [`MBR_SIZE`] bytes.
+    /// - [`Error::NotEnough`] if `dest` is not [`MBR_SIZE`] bytes.
     pub fn to_bytes(&self, dest: &mut [u8]) -> Result<()> {
         if dest.len() != MBR_SIZE {
             return Err(Error::NotEnough);
