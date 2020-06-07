@@ -214,7 +214,6 @@ impl<C: GptHelper<C>> Gpt<C> {
     /// # Panics
     ///
     /// - If `disk_size` is zero.
-    /// - If `block_size` is zero.
     pub fn new(uuid: Uuid, disk_size: Size, block_size: BlockSize) -> Self {
         assert_ne!(disk_size.as_bytes(), 0, "Disk size must not be zero");
         Self {
