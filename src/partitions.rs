@@ -111,16 +111,16 @@ partition_type! {
     LinuxReserved("8DA63339-0007-60C0-C436-083AC8230908"),
 
     /// CoreOS Alias for historical `coreos-rootfs`
-    CoreOsUsr("5dfbf5f4-2848-4bac-aa5e-0d9a20b745a6"),
+    CoreOsUsr("5DFBF5F4-2848-4BAC-AA5E-0D9A20B745A6"),
 
     /// CoreOS Auto-resizing
-    CoreOsResize("3884dd41-8582-4404-b9a8-e9b84f2df50e"),
+    CoreOsResize("3884DD41-8582-4404-B9A8-E9B84F2DF50E"),
 
     /// CoreOS Reserved for OEM usage
-    CoreOsReserved("c95dc21a-df0e-4340-8d7b-26cbfa9a03e0"),
+    CoreOsReserved("C95DC21A-DF0E-4340-8D7B-26CBFA9A03E0"),
 
     /// CoreOS RAID partition containing a rootfs
-    CoreOsRootRaid("be9067b9-ea49-4f15-b4f6-f36f8c9e1818"),
+    CoreOsRootRaid("BE9067B9-EA49-4F15-B4F6-F36F8C9E1818"),
 }
 
 #[cfg(test)]
