@@ -167,7 +167,7 @@ impl GptHelper<Vec<Partition>> for Vec<Partition> {
 ///
 /// If you have strict `no_std` memory requirements,
 /// this struct can be made smaller by limiting the number of
-/// partitions it stores.
+/// partitions it stores. No guarantees are made about the size of this struct.
 ///
 /// Note that doing so will effectively "cut off" any partitions beyond that
 /// value, if writing the GPT back out.
