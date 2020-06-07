@@ -47,7 +47,6 @@ mod util;
 
 mod gpt;
 mod mbr;
-#[allow(dead_code)]
 mod partitions;
 pub mod types;
 
