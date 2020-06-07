@@ -234,7 +234,7 @@ impl Header {
     /// - [`Error::NotEnough`] if `source` is not `block_size` bytes
     pub fn from_bytes(source: &[u8], block_size: BlockSize) -> Result<Self> {
         if source.len() < block_size.get() as usize {
-            return Err(Error::NotEnough);
+            // return Err(Error::NotEnough);
         }
         // SAFETY:
         // - `source` is valid for `size_of::<RawHeader>` bytes

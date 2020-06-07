@@ -5,8 +5,6 @@ use crate::{
     types::*,
 };
 #[cfg(feature = "alloc")]
-use alloc::vec;
-#[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 use arrayvec::{Array, ArrayVec};
 use core::convert::TryInto;
@@ -231,15 +229,7 @@ impl<C: GptHelper<C>> Gpt<C> {
     /// - [`Error::Invalid`] if the GPT is invalid
     /// - [`Error::NotEnough`] if `source` is too small.
     pub fn from_bytes(source: &[u8], block_size: BlockSize) -> Result<Self> {
-        // TODO: Check minimum size?
-        let b_size = block_size.get() as usize;
-        let primary = source.get(..b_size * 2).ok_or(Error::NotEnough)?;
-        let alt = source
-            .get(source.len() - b_size..)
-            .ok_or(Error::NotEnough)?;
         GptC::from_bytes_with_func(
-            primary,
-            alt,
             |i, buf| {
                 let i = i.0 as usize;
                 let size = buf.len();
@@ -285,11 +275,7 @@ impl<C: GptHelper<C>> Gpt<C> {
     /// # use parts::{Gpt, Error, types::{BlockSize, Size}};
     /// # fn main() -> anyhow::Result<()> {
     /// # let source = &[];
-    /// # let primary = &[];
-    /// # let alt = &[];
     /// let gpt: Gpt = Gpt::from_bytes_with_func(
-    ///     primary,
-    ///     alt,
     ///     |offset, buf| {
     ///         let offset = offset.0 as usize;
     ///         let len = buf.len();
@@ -306,16 +292,30 @@ impl<C: GptHelper<C>> Gpt<C> {
     /// # Ok(()) }
     /// ```
     pub fn from_bytes_with_func<F: FnMut(Offset, &mut [u8]) -> Result<()>>(
-        primary: &[u8],
-        alt: &[u8],
         mut func: F,
         block_size: BlockSize,
         disk_size: Size,
     ) -> Result<Self> {
-        let _mbr = ProtectiveMbr::from_bytes(primary.get(..MBR_SIZE).ok_or(Error::NotEnough)?)?;
-        let primary =
-            Header::from_bytes(primary.get(MBR_SIZE..).ok_or(Error::NotEnough)?, block_size)?;
-        let alt = Header::from_bytes(alt, block_size)?;
+        let _mbr = {
+            let mut buf = [0; MBR_SIZE];
+            func(Offset(0), &mut buf)?;
+            ProtectiveMbr::from_bytes(&buf)?
+        };
+        let primary = {
+            // NOTE: `block_size - 92` is reserved and must be zero, but we don't check.
+            // FIXME: CRC is over header_size, which may be larger.
+            let mut buf = [0; 92];
+            func(Offset(block_size.get()), &mut buf)?;
+            Header::from_bytes(&buf, block_size)?
+        };
+        let alt = {
+            // NOTE: `block_size - 92` is reserved and must be zero, but we don't check.
+            // FIXME: CRC is over header_size, which may be larger.
+            let mut buf = [0; 92];
+            let last: Block = (disk_size / block_size) - 1;
+            func(last * block_size, &mut buf)?;
+            Header::from_bytes(&buf, block_size)?
+        };
         //
         let mut partitions = C::new();
         validate(
@@ -353,16 +353,7 @@ impl<C: GptHelper<C>> Gpt<C> {
     #[cfg(feature = "std")]
     pub fn from_reader<RS: Read + Seek>(mut source: RS, block_size: BlockSize) -> Result<Self> {
         let disk_size = Size::from_bytes(source.seek(SeekFrom::End(0))?);
-        let last_lba = (disk_size / block_size) - 1;
-        let mut primary = vec![0; (block_size.get() * 2) as usize];
-        let mut alt = vec![0; block_size.get() as usize];
-        source.seek(SeekFrom::Start(0))?;
-        source.read_exact(&mut primary)?;
-        source.seek(SeekFrom::Start((last_lba * block_size).0))?;
-        source.read_exact(&mut alt)?;
         let gpt = GptC::from_bytes_with_func(
-            &primary,
-            &alt,
             |i, buf| {
                 source.seek(SeekFrom::Start(i.0))?;
                 source.read_exact(buf)?;
@@ -760,13 +751,7 @@ mod test {
     where
         N: GptHelper<N> + core::fmt::Debug,
     {
-        let block = BLOCK_SIZE.get() as usize;
-
-        let primary = &raw[..block * 2];
-        let alt = &raw[raw.len() - block..];
         let gpt: Gpt<N> = Gpt::from_bytes_with_func(
-            &primary,
-            &alt,
             |i, buf| {
                 let i = i.0 as usize;
                 let size = buf.len();
