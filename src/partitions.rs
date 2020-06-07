@@ -121,6 +121,30 @@ partition_type! {
 
     /// CoreOS RAID partition containing a rootfs
     CoreOsRootRaid("BE9067B9-EA49-4F15-B4F6-F36F8C9E1818"),
+
+    /// FreeBSD Boot Partition
+    FreeBsdBoot("83BD6B9D-7F41-11DC-BE0B-001560B84F0F"),
+
+    /// FreeBSD Data Partition
+    FreeBsdData("516E7CB4-6ECF-11D6-8FF8-00022D09712B"),
+
+    /// FreeBSD Swap Partition
+    FreeBsdSwap("516E7CB5-6ECF-11D6-8FF8-00022D09712B"),
+
+    /// FreeBSD Unix Filesystem Partition
+    FreeBsdUfs("516E7CB6-6ECF-11D6-8FF8-00022D09712B"),
+
+    /// FreeBSD Vinum Volume Manager Partition
+    FreeBsdVinum("516E7CB8-6ECF-11D6-8FF8-00022D09712B"),
+
+    /// FreeBSD ZFS Filesystem Partition
+    FreeBsdZfs("516E7CBA-6ECF-11D6-8FF8-00022D09712B"),
+
+    /// Apple HFS+ Filesystem Partition
+    AppleHfsPlus("48465300-0000-11AA-AA11-00306543ECAC"),
+
+    /// Apple Filesystem(APFS) Partition
+    AppleFilesystem("7C3457EF-0000-11AA-AA11-00306543ECAC"),
 }
 
 #[cfg(test)]
