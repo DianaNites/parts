@@ -104,10 +104,10 @@ partition_type! {
     /// Linux Swap
     LinuxSwap("0657FD6D-A4AB-43C4-84E5-0933C84B4F4F"),
 
-    /// Linux Reserved
+    /// Linux Logical Volume Management
     LinuxLvm("E6D6D379-F507-44C2-A23C-238F2A3DF928"),
 
-    /// Linux Logical Volume Management
+    /// Linux Reserved
     LinuxReserved("8DA63339-0007-60C0-C436-083AC8230908"),
 
     /// CoreOS Alias for historical `coreos-rootfs`
