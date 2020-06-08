@@ -334,6 +334,7 @@ impl PartitionBuilder {
         let end = match self.end {
             End::Abs(end) => end,
             End::Rel(end) => {
+                // FIXME: No idea how this rounds down.
                 // Minus block because last is inclusive.
                 Block(
                     (Offset((self.start * block_size).0 + end.as_bytes()) / block_size)
