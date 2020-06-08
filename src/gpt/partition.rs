@@ -299,7 +299,7 @@ impl PartitionBuilder {
     ///
     /// # Warning
     ///
-    /// Partitions can only be multiples of [`BlockSize`],
+    /// Partitions can only be multiples of the Gpt [`BlockSize`],
     /// so make sure `size` is evenly divisible or it'll be round **down**.
     pub fn size(mut self, size: Size) -> Self {
         self.end = End::Rel(size);
