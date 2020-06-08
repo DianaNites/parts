@@ -258,17 +258,7 @@ impl PartitionBuilder {
     /// New builder
     ///
     /// `uuid` is a unique identifer for the partition.
-    ///
-    /// # Panics
-    ///
-    /// - If `uuid` is nil.
     pub fn new(uuid: Uuid, gpt: &crate::Gpt) -> Self {
-        // Testing uses nil UUID's for convenience.
-        #[cfg(not(test))]
-        assert!(
-            !uuid.is_nil(),
-            "UUID cannot be nil. Partitions MUST be uniquely identifiable."
-        );
         Self {
             start: Default::default(),
             end: Default::default(),
