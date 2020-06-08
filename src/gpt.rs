@@ -542,17 +542,32 @@ impl<C: GptHelper<C>> Gpt<C> {
         Header::usable(self.block_size, self.disk_size).1
     }
 
-    /// Return how much space is remaining for a partition using this `Gpt`.
-    pub fn remaining(&self) -> Size {
-        let (first, last) = (self.first_usable(), self.last_usable());
-        let max = self
-            .partitions()
+    /// The next usable block for a Partition
+    ///
+    /// Note that this is not aligned in any way.
+    pub fn next_usable(&self) -> Block {
+        self.partitions()
             .iter()
-            .max_by_key(|x| x.start())
-            .map(|x| x.end())
-            .unwrap_or(first);
-        // Plus 1 block because inclusive.
-        (((last - max.0) + 1) * self.block_size).into()
+            // Plus 1 because `end` is inclusive
+            .map(|p| p.end() + 1)
+            .max()
+            .unwrap_or_else(|| self.first_usable())
+    }
+
+    /// The next 1MiB aligned usable block for a Partition
+    ///
+    /// Rounds **up** from [`Gpt::next_usable`]
+    pub fn next_usable_aligned(&self) -> Block {
+        let next = self.next_usable();
+        let block_1mib: Block = Size::from_mib(1) / self.block_size;
+        let rem = next.0 % block_1mib.0;
+        Block(next.0 + (block_1mib.0 - rem))
+    }
+
+    /// Remaining usable partition space
+    pub fn remaining(&self) -> Size {
+        // Plus 1 block because inclusive?
+        (((self.last_usable() - self.next_usable().0) + 1) * self.block_size).into()
     }
 }
 
@@ -605,7 +620,6 @@ mod test_no_std {
     // FIXME: should be from crate::util
     // SAFETY: Not zero
     const BLOCK_SIZE: BlockSize = unsafe { BlockSize::new_unchecked(512) };
-    const TEN_MIB_BYTES: usize = 10_485_760;
     type Result = super::Result<()>;
 
     type DefArray = ArrayVec<[Partition; 128]>;
@@ -695,11 +709,37 @@ mod test_no_std {
         }
     }
 
+    /// Test that GptC::next_usable{_aligned} are correct
+    #[test]
+    fn next_usable() {
+        let size = Size::from_mib(10);
+        let mut gpt: Gpt = Gpt::new(Uuid::nil(), size, BLOCK_SIZE);
+        assert_eq!(gpt.next_usable(), gpt.first_usable());
+        assert_eq!(gpt.next_usable(), Block(34));
+        assert_eq!(gpt.next_usable_aligned(), Block(2048));
+
+        let part = PartitionBuilder::new(Uuid::nil(), &gpt)
+            .start(gpt.first_usable())
+            .end(gpt.first_usable())
+            .finish();
+        gpt.add_partition(part).unwrap();
+        assert_eq!(gpt.next_usable(), Block(35));
+
+        let part = PartitionBuilder::new(Uuid::nil(), &gpt)
+            .start(gpt.next_usable_aligned())
+            .end(gpt.next_usable_aligned())
+            .finish();
+        gpt.add_partition(part).unwrap();
+        assert_eq!(gpt.next_usable(), Block(2049));
+        assert_eq!(gpt.next_usable_aligned(), Block(4096));
+    }
+
     /// Test GptC::remaining is correct
+    // FIXME: Not confident this test/math is correct
     #[test]
     fn remaining() -> Result {
-        let size = Size::from_bytes(TEN_MIB_BYTES as u64);
-        let mut gpt: Gpt = Gpt::new(Uuid::nil(), Size::from_mib(10), BLOCK_SIZE);
+        let size = Size::from_mib(10);
+        let mut gpt: Gpt = Gpt::new(Uuid::nil(), size, BLOCK_SIZE);
         let rem = gpt.remaining();
         let part = PartitionBuilder::new(Uuid::nil(), &gpt)
             .start(gpt.first_usable())
@@ -710,20 +750,28 @@ mod test_no_std {
             gpt.last_usable(),
             "Partition didn't use all available space"
         );
-        // 10 MiB, minus 2 partition arrays, two header blocks, and one MBR.
-        let expected: Size = (size - (Size::from_kib(16) * 2)) - (Size::from_bytes(512) * 3);
-        dbg!(expected);
+        // 10 MiB, minus 2 16 KiB partition arrays, minus 2 logical blocks
+        // for the headers, minus 1 block for the MBR
+        //
+        // This should be exactly how much total usable partition space is
+        // available.
+        let expected: Size = size
+            - (Size::from_kib(16) * 2)
+            - (Size::from_bytes(BLOCK_SIZE.get()) * 2)
+            - Size::from_bytes(BLOCK_SIZE.get());
+        dbg!(expected, expected.as_mib());
         assert_eq!(rem, expected, "Remaining wasn't expected size");
         //
         let part = PartitionBuilder::new(Uuid::nil(), &gpt)
             .start(gpt.first_usable())
+            // Minus 1 MiB, should leave exactly that much space left.
             .size(rem - Size::from_mib(1))
             .finish();
         gpt.add_partition(part)?;
         let rem = gpt.remaining();
         dbg!(rem);
         dbg!(rem.as_mib());
-        assert_eq!(rem, Size::from_mib(1) + Size::from_bytes(512));
+        assert_eq!(rem, Size::from_mib(1));
         Ok(())
     }
 
