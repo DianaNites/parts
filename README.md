@@ -4,13 +4,13 @@
 ![Maintenance](https://img.shields.io/maintenance/yes/2020?style=flat-square)
 ![GitHub Release Date](https://img.shields.io/github/release-date/DianaNites/parts?style=flat-square)
 ![GitHub commit activity](https://img.shields.io/github/commit-activity/w/DianaNites/parts?style=flat-square)
-![Crates.io](https://img.shields.io/crates/v/parts?style=flat-square)
+[![Crates.io](https://img.shields.io/crates/v/parts?style=flat-square)](https://crates.io/crates/parts)
 ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/DianaNites/parts?sort=semver&style=flat-square)
 ![Crates.io](https://img.shields.io/crates/l/parts?style=flat-square)
 ![GitHub issues](https://img.shields.io/github/issues/DianaNites/parts?style=flat-square)
 ![GitHub pull requests](https://img.shields.io/github/issues-pr/DianaNites/parts?style=flat-square)
 ![Liberapay patrons](https://img.shields.io/liberapay/patrons/DianaNites?style=flat-square)
-![Crates.io (latest)](https://img.shields.io/crates/dv/parts?style=flat-square)
+[![Crates.io (latest)](https://img.shields.io/crates/dv/parts?style=flat-square)](https://crates.io/crates/parts)
 
 A GPT Partition Manager.
 
