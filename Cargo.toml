@@ -12,16 +12,16 @@ description = "A GPT Partition Manager"
 [dependencies]
 uuid = { version = "0.8.1", default-features = false }
 crc = { version = "1.8.1", default-features = false }
-derive_more = "0.99.7"
+derive_more = "0.99.8"
 displaydoc = { version = "0.1.6", default-features = false }
-thiserror = { version = "1.0.19", optional = true }
-serde_crate = { package = "serde", version = "1.0.111", default-features = false, optional = true }
+thiserror = { version = "1.0.20", optional = true }
+serde_crate = { package = "serde", version = "1.0.114", default-features = false, optional = true }
 arrayvec = { version = "0.5.1", default-features = false }
 
 [dev-dependencies]
 static_assertions = "1.1.0"
 anyhow = "1.0.31"
-thiserror = "1.0.19"
+thiserror = "1.0.20"
 pretty_assertions = "0.6.1"
 
 [features]
