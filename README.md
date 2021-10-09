@@ -1,7 +1,7 @@
 # Parts
 
 [![standard-readme compliant](https://img.shields.io/badge/readme%20style-standard-brightgreen.svg?style=flat-square)](https://github.com/RichardLitt/standard-readme)
-![Maintenance](https://img.shields.io/maintenance/yes/2020?style=flat-square)
+![Maintenance](https://img.shields.io/maintenance/yes/2021?style=flat-square)
 ![GitHub Release Date](https://img.shields.io/github/release-date/DianaNites/parts?style=flat-square)
 ![GitHub commit activity](https://img.shields.io/github/commit-activity/w/DianaNites/parts?style=flat-square)
 [![Crates.io](https://img.shields.io/crates/v/parts?style=flat-square)](https://crates.io/crates/parts)
